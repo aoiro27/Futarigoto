@@ -20,20 +20,20 @@
 		CC26F4D0EA55D90F18B740D7 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34C57CEB516107AC143DC93E /* HomeView.swift */; };
 		ED768F0F6924A3C36E18036F /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28E98AEC0CD20ACCEDD3866D /* AppTheme.swift */; };
 		EE9EAA76874C3AB69981D1BD /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD562EB28C2575AF31123BE6 /* WelcomeView.swift */; };
+		EEC90D9127BB25C786611BD8 /* HouseholdCloudStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 855F261F508E4C360C26DD87 /* HouseholdCloudStore.swift */; };
 		FEEB46F81049C6DE34478E58 /* AppSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 098E1912FB1E3C26CF468D66 /* AppSession.swift */; };
-		9B2D4C6E81A04F3B9C7E1D55 /* HouseholdCloudStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C8E1F4A92B6471C8D0E5A77 /* HouseholdCloudStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		021CD4C205063C8D4A49662B /* WeeklyReviewFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeeklyReviewFlowView.swift; sourceTree = "<group>"; };
 		098E1912FB1E3C26CF468D66 /* AppSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSession.swift; sourceTree = "<group>"; };
-		3C8E1F4A92B6471C8D0E5A77 /* HouseholdCloudStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdCloudStore.swift; sourceTree = "<group>"; };
 		28E98AEC0CD20ACCEDD3866D /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
-		30934F0B526F0BC4A69E4A5F /* ふたりごと.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "ふたりごと.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		30934F0B526F0BC4A69E4A5F /* Futarigoto.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Futarigoto.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		34C57CEB516107AC143DC93E /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		4A072A4002C9C684FE16549D /* Domain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Domain.swift; sourceTree = "<group>"; };
 		65006F6FFD2985A256AF51E8 /* AgreementViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgreementViews.swift; sourceTree = "<group>"; };
 		6C4606A4CD4C251C384E6E6A /* AppWeek.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppWeek.swift; sourceTree = "<group>"; };
+		855F261F508E4C360C26DD87 /* HouseholdCloudStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdCloudStore.swift; sourceTree = "<group>"; };
 		918FBDDFC60AB4D278F7C6F1 /* FutarigotoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FutarigotoApp.swift; sourceTree = "<group>"; };
 		B6A23EF9C093AB0F42820A61 /* ObservationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObservationViews.swift; sourceTree = "<group>"; };
 		C565FE556198F49328E71639 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
@@ -71,7 +71,7 @@
 		3576CD2554E15BBE98076514 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				30934F0B526F0BC4A69E4A5F /* ふたりごと.app */,
+				30934F0B526F0BC4A69E4A5F /* Futarigoto.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -148,7 +148,7 @@
 			children = (
 				098E1912FB1E3C26CF468D66 /* AppSession.swift */,
 				6C4606A4CD4C251C384E6E6A /* AppWeek.swift */,
-				3C8E1F4A92B6471C8D0E5A77 /* HouseholdCloudStore.swift */,
+				855F261F508E4C360C26DD87 /* HouseholdCloudStore.swift */,
 				CEBD551138A8524A37CC0F83 /* NotificationService.swift */,
 			);
 			path = Services;
@@ -172,7 +172,7 @@
 			packageProductDependencies = (
 			);
 			productName = Futarigoto;
-			productReference = 30934F0B526F0BC4A69E4A5F /* ふたりごと.app */;
+			productReference = 30934F0B526F0BC4A69E4A5F /* Futarigoto.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -185,6 +185,7 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					EA13D35A7A3DF9B7B7EB95C8 = {
+						DevelopmentTeam = UMS95NYGUN;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -226,13 +227,13 @@
 			files = (
 				BF614DB65419C124DE54DFA6 /* AgreementViews.swift in Sources */,
 				FEEB46F81049C6DE34478E58 /* AppSession.swift in Sources */,
-				9B2D4C6E81A04F3B9C7E1D55 /* HouseholdCloudStore.swift in Sources */,
 				ED768F0F6924A3C36E18036F /* AppTheme.swift in Sources */,
 				801758ACDB9CA687ED3B08EE /* AppWeek.swift in Sources */,
 				4144289BFD42FB4572953B64 /* Domain.swift in Sources */,
 				BD753AFF1280E2BB4C010F04 /* Entities.swift in Sources */,
 				5727F7ED9A6E949DA27B9D85 /* FutarigotoApp.swift in Sources */,
 				CC26F4D0EA55D90F18B740D7 /* HomeView.swift in Sources */,
+				EEC90D9127BB25C786611BD8 /* HouseholdCloudStore.swift in Sources */,
 				90B694956F2BCE9DC0539682 /* NotificationService.swift in Sources */,
 				68485FB983BA34037A12527D /* ObservationViews.swift in Sources */,
 				57D97B4977A0EB5566BB9D66 /* RootView.swift in Sources */,
@@ -249,9 +250,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Futarigoto/Futarigoto.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CODE_SIGN_ENTITLEMENTS = Futarigoto/Futarigoto.entitlements;
 				DEVELOPMENT_TEAM = UMS95NYGUN;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = Futarigoto/Info.plist;
@@ -393,9 +394,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Futarigoto/Futarigoto-Release.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CODE_SIGN_ENTITLEMENTS = Futarigoto/Futarigoto.entitlements;
 				DEVELOPMENT_TEAM = UMS95NYGUN;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = Futarigoto/Info.plist;
