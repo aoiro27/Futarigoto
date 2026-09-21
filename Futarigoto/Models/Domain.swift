@@ -52,6 +52,15 @@ enum SelfReflection: String, Codable, CaseIterable, Identifiable {
         case .oftenMissed: "あまりまもれなかった"
         }
     }
+
+    var rank: Int {
+        switch self {
+        case .veryGood: 3
+        case .mostlyGood: 2
+        case .sometimesMissed: 1
+        case .oftenMissed: 0
+        }
+    }
 }
 
 enum AppCopy {
@@ -65,7 +74,7 @@ enum AppCopy {
     static let weekUsualTitle = "今日も、いつもどおり。"
     static let weekUsualBody = "気になったことや、うれしかったことがあったら残しておきましょう。"
     static let weekReviewTitle = "ふりかえってみませんか？"
-    static let weekReviewBody = "約束のことと、日々の想いを見てみましょう。"
+    static let weekReviewBody = "自分のことと相手のことを見て、見え方のちがいも残しましょう。"
     static let weekReviewAction = "ふりかえる"
     static let agreements = "わが家の約束"
     static let addToday = "＋  今日のことを残す"
@@ -90,7 +99,6 @@ enum AppCopy {
     static let partnerAskSuffix = "は、この約束をまもれてた？"
     static let notThisWeek = "今回はなかった"
     static let selfEvalLabel = "自己評価"
-    static let gapNote = "ふたりの見え方がちがっています"
     static let partnerFelt = "今週、相手が感じたこと"
     static let reviewDoneTitle = "今週のふりかえりはここまでです。"
     static let reviewDoneBody = "気になることがあれば、ふたりで話してみましょう。"

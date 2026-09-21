@@ -20,9 +20,35 @@ struct WeeklyReviewFlowView: View {
         case recap
     }
 
-    private var targets: [Agreement] {
+    private var questions: [ReviewQuestion] {
         guard let userId = session.currentUserID else { return [] }
-        return householdAgreements.filter { $0.applies(to: userId) }
+        let partner = session.partner
+        var items: [ReviewQuestion] = []
+        for agreement in householdAgreements {
+            if agreement.applies(to: userId) {
+                items.append(
+                    ReviewQuestion(
+                        agreementId: agreement.id,
+                        title: agreement.title,
+                        focus: .selfEval,
+                        eyebrow: "自分のこと",
+                        ask: AppCopy.applicableAsk
+                    )
+                )
+            }
+            if let partner, agreement.applies(to: partner.id) {
+                items.append(
+                    ReviewQuestion(
+                        agreementId: agreement.id,
+                        title: agreement.title,
+                        focus: .partnerEval,
+                        eyebrow: "\(partner.displayName)のこと",
+                        ask: "\(partner.displayName)\(AppCopy.partnerAskSuffix)"
+                    )
+                )
+            }
+        }
+        return items
     }
 
     private var householdAgreements: [Agreement] {
@@ -32,9 +58,9 @@ struct WeeklyReviewFlowView: View {
             .sorted { $0.createdAt < $1.createdAt }
     }
 
-    private var current: Agreement? {
-        guard index < targets.count else { return nil }
-        return targets[index]
+    private var current: ReviewQuestion? {
+        guard index < questions.count else { return nil }
+        return questions[index]
     }
 
     var body: some View {
@@ -78,21 +104,25 @@ struct WeeklyReviewFlowView: View {
 
     @ViewBuilder
     private var selfReviewContent: some View {
-        if targets.isEmpty {
+        if questions.isEmpty {
             VStack(spacing: 20) {
                 ScreenHeader(
                     title: "ふりかえり",
-                    subtitle: "いま残っている約束がないので、自分への質問はありません。"
+                    subtitle: "いま残っている約束がないので、ふりかえりの質問はありません。"
                 )
                 Button("次へ") { finishSelfReview() }
                     .buttonStyle(PrimaryButtonStyle())
             }
             .padding(24)
         } else if let current {
-            let answer = binding(for: current.id)
+            let answer = binding(for: current)
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    Text("\(index + 1) / \(targets.count)")
+                    Text("\(index + 1) / \(questions.count)")
+                        .font(.bodyRounded(13, weight: .semibold))
+                        .foregroundStyle(AppTheme.terracotta)
+
+                    Text(current.eyebrow)
                         .font(.bodyRounded(13, weight: .semibold))
                         .foregroundStyle(AppTheme.terracotta)
 
@@ -100,15 +130,15 @@ struct WeeklyReviewFlowView: View {
                         .font(.titleRounded(26))
                         .foregroundStyle(AppTheme.ink)
 
-                    Text(AppCopy.applicableAsk)
+                    Text(current.ask)
                         .font(.bodyRounded(17))
                         .foregroundStyle(AppTheme.inkMuted)
 
                     VStack(alignment: .leading, spacing: 12) {
                         ForEach(SelfReflection.allCases) { option in
-                            ChoiceCard(selected: answer.wrappedValue.applicable == true && answer.wrappedValue.selfReflection == option) {
+                            ChoiceCard(selected: answer.wrappedValue.applicable == true && answer.wrappedValue.reflection == option) {
                                 answer.wrappedValue.applicable = true
-                                answer.wrappedValue.selfReflection = option
+                                answer.wrappedValue.reflection = option
                                 goNext()
                             } content: {
                                 Text(option.label)
@@ -120,7 +150,7 @@ struct WeeklyReviewFlowView: View {
 
                     Button(AppCopy.notThisWeek) {
                         answer.wrappedValue.applicable = false
-                        answer.wrappedValue.selfReflection = nil
+                        answer.wrappedValue.reflection = nil
                         goNext()
                     }
                     .buttonStyle(QuietButtonStyle())
@@ -149,10 +179,6 @@ struct WeeklyReviewFlowView: View {
                 subtitle: "自分の入力は残りました。相手も終わると、ふたりの答えと日々の想いを一緒に見られます。今日はもう一度入力できません。"
             )
             Spacer()
-            Button("相手の入力を確認する") {
-                Task { await session.refreshFromCloud() }
-            }
-            .buttonStyle(PrimaryButtonStyle())
             Button("ホームにもどる") { dismiss() }
                 .buttonStyle(SecondaryButtonStyle())
         }
@@ -168,7 +194,7 @@ struct WeeklyReviewFlowView: View {
                     title: session.partner == nil ? "ふりかえり" : "ふたりのふりかえり",
                     subtitle: session.partner == nil
                         ? "自分が残したことと、そのとき見えた想いです。"
-                        : "自分と相手のふりかえりと、日々残していた想いです。"
+                        : "自分の評価と相手から見た評価を並べて、見え方のちがいを見られます。"
                 )
 
                 if householdAgreements.isEmpty {
@@ -200,21 +226,12 @@ struct WeeklyReviewFlowView: View {
                 .foregroundStyle(AppTheme.ink)
 
             if !people.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 14) {
                     Text("ふりかえり")
                         .font(.bodyRounded(13, weight: .semibold))
                         .foregroundStyle(AppTheme.terracotta)
                     ForEach(people, id: \.userId) { person in
-                        HStack(alignment: .top, spacing: 12) {
-                            Text(person.name)
-                                .font(.bodyRounded(15, weight: .medium))
-                                .foregroundStyle(AppTheme.ink)
-                                .frame(width: 88, alignment: .leading)
-                            Text(person.label)
-                                .font(.bodyRounded(15))
-                                .foregroundStyle(AppTheme.inkMuted)
-                            Spacer(minLength: 0)
-                        }
+                        recapPersonBlock(person)
                     }
                 }
             }
@@ -261,24 +278,66 @@ struct WeeklyReviewFlowView: View {
         .appCard()
     }
 
+    private func recapPersonBlock(_ person: RecapPerson) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(person.name)
+                .font(.bodyRounded(16, weight: .medium))
+                .foregroundStyle(AppTheme.ink)
+
+            recapLine(label: AppCopy.selfEvalLabel, value: person.selfLabel)
+
+            if let otherName = person.otherName, let otherLabel = person.otherLabel {
+                recapLine(
+                    label: "\(otherName)から",
+                    value: otherLabel,
+                    emphasis: person.gap
+                )
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(person.gap.background)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private func recapLine(label: String, value: String, emphasis: ReflectionGap? = nil) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(label)
+                .font(.bodyRounded(14))
+                .foregroundStyle(emphasis?.color ?? AppTheme.inkMuted)
+                .frame(width: 88, alignment: .leading)
+            Text(value)
+                .font(.bodyRounded(15, weight: emphasis == nil ? .regular : .semibold))
+                .foregroundStyle(emphasis?.color ?? AppTheme.ink)
+            Spacer(minLength: 0)
+        }
+    }
+
     private func prepare() {
         if readOnly || session.hasCompletedOwnReview(reviewDate: reviewDate) {
             advanceAfterSelfReview()
             return
         }
-        drafts = targets.map { agreement in
-            if let existing = reflection(userId: session.currentUserID, agreementId: agreement.id) {
+        drafts = questions.map { question in
+            let existing = reflection(userId: session.currentUserID, agreementId: question.agreementId)
+            switch question.focus {
+            case .selfEval:
                 return ReviewAnswer(
-                    agreementId: agreement.id,
-                    applicable: existing.applicable,
-                    selfReflection: existing.selfReflection
+                    agreementId: question.agreementId,
+                    focus: .selfEval,
+                    applicable: existing?.hasSelfAnswer == true ? existing?.applicable : nil,
+                    reflection: existing?.selfReflection
+                )
+            case .partnerEval:
+                return ReviewAnswer(
+                    agreementId: question.agreementId,
+                    focus: .partnerEval,
+                    applicable: existing?.otherApplicable,
+                    reflection: existing?.otherReflection
                 )
             }
-            return ReviewAnswer(agreementId: agreement.id)
         }
-        index = drafts.firstIndex(where: {
-            $0.applicable == nil || ($0.applicable == true && $0.selfReflection == nil)
-        }) ?? 0
+        index = drafts.firstIndex(where: { !$0.isComplete }) ?? 0
         phase = .selfReview
     }
 
@@ -289,13 +348,14 @@ struct WeeklyReviewFlowView: View {
         }
     }
 
-    private func binding(for id: UUID) -> Binding<ReviewAnswer> {
+    private func binding(for question: ReviewQuestion) -> Binding<ReviewAnswer> {
         Binding(
             get: {
-                drafts.first(where: { $0.agreementId == id }) ?? ReviewAnswer(agreementId: id)
+                drafts.first(where: { $0.id == question.id })
+                    ?? ReviewAnswer(agreementId: question.agreementId, focus: question.focus)
             },
             set: { newValue in
-                if let i = drafts.firstIndex(where: { $0.agreementId == id }) {
+                if let i = drafts.firstIndex(where: { $0.id == question.id }) {
                     drafts[i] = newValue
                 } else {
                     drafts.append(newValue)
@@ -307,7 +367,7 @@ struct WeeklyReviewFlowView: View {
     private func goNext() {
         persistCurrentIfPossible()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-            if index + 1 < targets.count {
+            if index + 1 < questions.count {
                 index += 1
             } else {
                 finishSelfReview()
@@ -317,33 +377,36 @@ struct WeeklyReviewFlowView: View {
 
     private func persistCurrentIfPossible() {
         guard index < drafts.count else { return }
-        let draft = drafts[index]
-        guard let applicable = draft.applicable else { return }
-        if applicable && draft.selfReflection == nil { return }
-        try? session.saveReflections([
-            ReflectionDraft(
-                agreementId: draft.agreementId,
-                applicable: applicable,
-                selfReflection: applicable ? draft.selfReflection : nil
-            )
-        ], reviewDate: reviewDate)
+        guard let payload = reflectionDraft(from: drafts[index]) else { return }
+        try? session.saveReflections([payload], reviewDate: reviewDate)
     }
 
     private func finishSelfReview() {
         persistCurrentIfPossible()
-        let payload = drafts.compactMap { draft -> ReflectionDraft? in
-            guard let applicable = draft.applicable else { return nil }
-            return ReflectionDraft(
-                agreementId: draft.agreementId,
-                applicable: applicable,
-                selfReflection: applicable ? draft.selfReflection : nil
-            )
-        }
+        let payload = drafts.compactMap(reflectionDraft(from:))
         try? session.saveReflections(payload, reviewDate: reviewDate)
         Task {
             await session.refreshFromCloud()
             session.revealReviewNotesIfNeeded(reviewDate: reviewDate)
             advanceAfterSelfReview()
+        }
+    }
+
+    private func reflectionDraft(from answer: ReviewAnswer) -> ReflectionDraft? {
+        guard answer.isComplete, let applicable = answer.applicable else { return nil }
+        switch answer.focus {
+        case .selfEval:
+            return ReflectionDraft(
+                agreementId: answer.agreementId,
+                applicable: applicable,
+                selfReflection: applicable ? answer.reflection : nil
+            )
+        case .partnerEval:
+            return ReflectionDraft(
+                agreementId: answer.agreementId,
+                otherApplicable: applicable,
+                otherReflection: applicable ? answer.reflection : nil
+            )
         }
     }
 
@@ -357,20 +420,31 @@ struct WeeklyReviewFlowView: View {
         }
     }
 
-    private func recapPeople(for agreement: Agreement) -> [(userId: UUID, name: String, label: String)] {
-        session.householdMembers
-            .sorted { lhs, rhs in
-                if lhs.id == session.currentUserID { return true }
-                if rhs.id == session.currentUserID { return false }
-                return lhs.displayName.localizedStandardCompare(rhs.displayName) == .orderedAscending
+    private func recapPeople(for agreement: Agreement) -> [RecapPerson] {
+        let members = session.householdMembers.sorted { lhs, rhs in
+            if lhs.id == session.currentUserID { return true }
+            if rhs.id == session.currentUserID { return false }
+            return lhs.displayName.localizedStandardCompare(rhs.displayName) == .orderedAscending
+        }
+        return members.compactMap { member in
+            guard agreement.applies(to: member.id) else { return nil }
+            let selfValue = selfReflectionValue(userId: member.id, agreementId: agreement.id)
+            let other = members.first(where: { $0.id != member.id })
+            let otherValue = other.flatMap {
+                otherReflectionValue(reviewerId: $0.id, agreementId: agreement.id)
             }
-            .compactMap { member in
-                guard agreement.applies(to: member.id) else { return nil }
-                return (member.id, member.displayName, reflectionLabel(userId: member.id, agreementId: agreement.id))
-            }
+            return RecapPerson(
+                userId: member.id,
+                name: member.displayName,
+                selfLabel: selfReflectionLabel(userId: member.id, agreementId: agreement.id),
+                otherName: other?.displayName,
+                otherLabel: other.map { otherViewLabel(reviewerId: $0.id, agreementId: agreement.id) },
+                gap: ReflectionGap(selfValue: selfValue, otherValue: otherValue)
+            )
+        }
     }
 
-    private func reflectionLabel(userId: UUID, agreementId: UUID) -> String {
+    private func selfReflectionLabel(userId: UUID, agreementId: UUID) -> String {
         guard let item = reflection(userId: userId, agreementId: agreementId) else {
             return "まだ入力がありません"
         }
@@ -378,6 +452,32 @@ struct WeeklyReviewFlowView: View {
             return AppCopy.notThisWeek
         }
         return item.selfReflection?.label ?? "—"
+    }
+
+    private func otherViewLabel(reviewerId: UUID, agreementId: UUID) -> String {
+        guard let item = reflection(userId: reviewerId, agreementId: agreementId),
+              let otherApplicable = item.otherApplicable else {
+            return "まだ入力がありません"
+        }
+        if !otherApplicable {
+            return AppCopy.notThisWeek
+        }
+        return item.otherReflection?.label ?? "—"
+    }
+
+    private func selfReflectionValue(userId: UUID, agreementId: UUID) -> SelfReflection? {
+        guard let item = reflection(userId: userId, agreementId: agreementId), item.applicable else {
+            return nil
+        }
+        return item.selfReflection
+    }
+
+    private func otherReflectionValue(reviewerId: UUID, agreementId: UUID) -> SelfReflection? {
+        guard let item = reflection(userId: reviewerId, agreementId: agreementId),
+              item.otherApplicable == true else {
+            return nil
+        }
+        return item.otherReflection
     }
 
     private func reflection(userId: UUID?, agreementId: UUID) -> WeeklyReflection? {
@@ -482,10 +582,78 @@ struct ReviewHistoryView: View {
     }
 }
 
-struct ReviewAnswer {
+enum ReviewFocus: Hashable {
+    case selfEval
+    case partnerEval
+}
+
+struct ReviewQuestion: Identifiable, Hashable {
     var agreementId: UUID
+    var title: String
+    var focus: ReviewFocus
+    var eyebrow: String
+    var ask: String
+
+    var id: String { "\(agreementId.uuidString)-\(focus)" }
+}
+
+struct ReviewAnswer: Identifiable {
+    var agreementId: UUID
+    var focus: ReviewFocus
     var applicable: Bool?
-    var selfReflection: SelfReflection?
+    var reflection: SelfReflection?
+
+    var id: String { "\(agreementId.uuidString)-\(focus)" }
+
+    var isComplete: Bool {
+        guard let applicable else { return false }
+        return applicable == false || reflection != nil
+    }
+}
+
+private enum ReflectionGap {
+    case better
+    case worse
+
+    init?(selfValue: SelfReflection?, otherValue: SelfReflection?) {
+        guard let selfValue, let otherValue else { return nil }
+        if otherValue.rank > selfValue.rank {
+            self = .better
+        } else if otherValue.rank < selfValue.rank {
+            self = .worse
+        } else {
+            return nil
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .better: AppTheme.sage
+        case .worse: AppTheme.ochre
+        }
+    }
+
+    var background: Color {
+        switch self {
+        case .better: AppTheme.sageSoft
+        case .worse: AppTheme.ochreSoft
+        }
+    }
+}
+
+private struct RecapPerson {
+    var userId: UUID
+    var name: String
+    var selfLabel: String
+    var otherName: String?
+    var otherLabel: String?
+    var gap: ReflectionGap?
+}
+
+private extension Optional where Wrapped == ReflectionGap {
+    var background: Color {
+        self?.background ?? AppTheme.creamDeep.opacity(0.55)
+    }
 }
 
 struct PresentedReview: Identifiable {

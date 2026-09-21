@@ -352,7 +352,10 @@ final class AppSession {
 
     private func hasCompletedReview(userId: UUID, reviewDate: Date) -> Bool {
         let existing = reflections(userId: userId, reviewDate: reviewDate)
-        let byAgreement = Dictionary(uniqueKeysWithValues: existing.map { ($0.agreementId, $0) })
+        var byAgreement: [UUID: WeeklyReflection] = [:]
+        for item in existing {
+            byAgreement[item.agreementId] = item
+        }
         let myAgreements = applicableAgreements(for: userId)
         let otherId = householdMembers.first(where: { $0.id != userId })?.id
         let otherAgreements = otherId.map { applicableAgreements(for: $0) } ?? []
@@ -371,7 +374,20 @@ final class AppSession {
         let context = try requireContext()
         guard let userId = currentUserID else { return }
         let day = AppWeek.startOfDay(reviewDate)
+        var merged: [UUID: ReflectionDraft] = [:]
         for draft in drafts {
+            var item = merged[draft.agreementId] ?? ReflectionDraft(agreementId: draft.agreementId)
+            if draft.applicable != nil {
+                item.applicable = draft.applicable
+                item.selfReflection = draft.selfReflection
+            }
+            if draft.otherApplicable != nil {
+                item.otherApplicable = draft.otherApplicable
+                item.otherReflection = draft.otherReflection
+            }
+            merged[draft.agreementId] = item
+        }
+        for draft in merged.values {
             if let existing = reflections(userId: userId, reviewDate: day)
                 .first(where: { $0.agreementId == draft.agreementId }) {
                 if let applicable = draft.applicable {
