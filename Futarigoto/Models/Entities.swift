@@ -98,6 +98,9 @@ final class DailyObservation {
     var authorId: UUID
     var typeRaw: String
     var note: String?
+    @Attribute(.externalStorage) var imageData: Data?
+    var imagePath: String?
+    var imageExpiresAt: Date?
     var createdAt: Date
     var updatedAt: Date
     var deletedAt: Date?
@@ -110,6 +113,14 @@ final class DailyObservation {
 
     var isDeleted: Bool { deletedAt != nil }
     var isPublished: Bool { publishedAt != nil }
+    var isImageExpired: Bool {
+        let deadline = imageExpiresAt ?? createdAt.addingTimeInterval(ObservationPhotoPolicy.lifetime)
+        return deadline <= Date()
+    }
+    var visibleImageData: Data? {
+        guard let imageData, !imageData.isEmpty, !isImageExpired else { return nil }
+        return imageData
+    }
 
     init(
         id: UUID = UUID(),
@@ -117,6 +128,9 @@ final class DailyObservation {
         authorId: UUID,
         type: ObservationType,
         note: String? = nil,
+        imageData: Data? = nil,
+        imagePath: String? = nil,
+        imageExpiresAt: Date? = nil,
         createdAt: Date = .now,
         updatedAt: Date = .now,
         deletedAt: Date? = nil,
@@ -127,6 +141,9 @@ final class DailyObservation {
         self.authorId = authorId
         self.typeRaw = type.rawValue
         self.note = note
+        self.imageData = imageData
+        self.imagePath = imagePath
+        self.imageExpiresAt = imageExpiresAt
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.deletedAt = deletedAt

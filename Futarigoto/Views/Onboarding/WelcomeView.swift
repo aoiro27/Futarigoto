@@ -239,7 +239,7 @@ struct InvitePartnerView: View {
                 .buttonStyle(PrimaryButtonStyle())
 
                 if session.cloudPublishFailed {
-                    Text("まだ相手と共有できていません。iCloudにサインインしてから、もう一度試してください。")
+                    Text("まだ相手と共有できていません。通信できる場所でもう一度試してください。")
                         .font(.bodyRounded(14))
                         .foregroundStyle(AppTheme.terracotta)
                     Button("共有し直す") {

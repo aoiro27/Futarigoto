@@ -8,6 +8,10 @@ options:
 settings:
   SWIFT_VERSION: "5.0"
   IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+packages:
+  supabase-swift:
+    url: https://github.com/supabase/supabase-swift
+    exactVersion: "2.49.0"
 targets:
   Futarigoto:
     type: application
@@ -17,6 +21,9 @@ targets:
         excludes:
           - Info.plist
           - "*.entitlements"
+    dependencies:
+      - package: supabase-swift
+        product: Supabase
     resources:
       - path: Futarigoto/Assets.xcassets
         type: folder
@@ -42,6 +49,7 @@ targets:
             CFBundleURLSchemes:
               - futarigoto
         NSUserNotificationUsageDescription: 週に一度、ふりかえりの時間をお知らせします。
+        NSCameraUsageDescription: 今日の様子を写真に残すために、カメラを使います。
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: jp.yukiusui.futarigoto

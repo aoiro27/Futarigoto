@@ -17,7 +17,6 @@ final class AppSession {
 
     private let userDefaultsKey = "currentUserID"
     private let partnerRevealPrefix = "partnerRevealSeen."
-    private let cloudSlotPrefix = "cloudSlot."
 
     func attach(modelContext: ModelContext) {
         self.modelContext = modelContext
@@ -52,9 +51,11 @@ final class AppSession {
     var partner: User? {
         let _ = syncRevision
         guard let householdId = currentHouseholdID, let userId = currentUserID else { return nil }
-        let other = members(in: householdId).first(where: { $0.userId != userId })
-        guard let other else { return nil }
-        return user(id: other.userId)
+        let others = members(in: householdId).filter { $0.userId != userId }
+        if let withUser = others.first(where: { user(id: $0.userId) != nil }) {
+            return user(id: withUser.userId)
+        }
+        return others.first.flatMap { user(id: $0.userId) }
     }
 
     var householdMembers: [User] {
@@ -90,15 +91,28 @@ final class AppSession {
         let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        let user = User(displayName: trimmed)
-        let household = Household(inviteCode: InviteCode.make())
+        let householdId = UUID()
+        let inviteCode = InviteCode.make()
+        let userId: UUID
+        do {
+            userId = try await HouseholdCloudStore.ensureUser()
+            try await HouseholdCloudStore.createHousehold(
+                id: householdId,
+                inviteCode: inviteCode,
+                displayName: trimmed
+            )
+        } catch {
+            throw HouseholdCloudStore.mapCloudError(error)
+        }
+
+        let user = User(id: userId, displayName: trimmed)
+        let household = Household(id: householdId, inviteCode: inviteCode)
         let member = HouseholdMember(householdId: household.id, userId: user.id)
         context.insert(user)
         context.insert(household)
         context.insert(member)
         try context.save()
         setCurrentUser(user.id)
-        rememberCloudSlot(0, householdId: household.id)
         showsPostCreateInvite = true
         NotificationService.shared.requestAuthorization()
         await publishToCloud(markFailure: true)
@@ -116,37 +130,28 @@ final class AppSession {
             throw AppError.invalidInvite
         }
 
-        var joinedViaCloud = false
-        if household(byCode: normalized) == nil {
-            do {
-                guard let remote = try await HouseholdCloudStore.fetchMerged(code: normalized) else {
-                    throw AppError.invalidInvite
-                }
-                if remote.members.count >= 2 {
-                    throw AppError.householdFull
-                }
-                try installSnapshot(remote)
-                joinedViaCloud = true
-            } catch let error as AppError {
-                throw error
-            } catch {
-                throw HouseholdCloudStore.mapCloudError(error)
+        let userId: UUID
+        do {
+            userId = try await HouseholdCloudStore.ensureUser()
+            _ = try await HouseholdCloudStore.joinHousehold(
+                inviteCode: normalized,
+                displayName: trimmed
+            )
+            guard let remote = try await HouseholdCloudStore.fetchHousehold() else {
+                throw AppError.invalidInvite
             }
+            try installSnapshot(remote)
+        } catch let error as AppError {
+            throw error
+        } catch {
+            throw HouseholdCloudStore.mapCloudError(error)
         }
 
-        guard let household = household(byCode: normalized) else {
-            throw AppError.invalidInvite
+        if user(id: userId) == nil {
+            context.insert(User(id: userId, displayName: trimmed))
+            try context.save()
         }
-        if members(in: household.id).count >= 2 {
-            throw AppError.householdFull
-        }
-        let user = User(displayName: trimmed)
-        let member = HouseholdMember(householdId: household.id, userId: user.id)
-        context.insert(user)
-        context.insert(member)
-        try context.save()
-        setCurrentUser(user.id)
-        rememberCloudSlot(joinedViaCloud ? 1 : 0, householdId: household.id)
+        setCurrentUser(userId)
         pendingInviteCode = nil
         NotificationService.shared.requestAuthorization()
         await publishToCloud(markFailure: true)
@@ -262,25 +267,36 @@ final class AppSession {
             .sorted { $0.createdAt > $1.createdAt }
     }
 
-    func addObservation(agreementId: UUID, type: ObservationType, note: String?) throws {
+    func addObservation(agreementId: UUID, type: ObservationType, note: String?, imageData: Data?) throws {
         let context = try requireContext()
         guard let userId = currentUserID else { return }
+        let preparedImage = normalizedImage(imageData)
         let observation = DailyObservation(
             agreementId: agreementId,
             authorId: userId,
             type: type,
-            note: normalizedNote(note)
+            note: normalizedNote(note),
+            imageData: preparedImage,
+            imageExpiresAt: preparedImage == nil ? nil : ObservationPhotoPolicy.expiryDate()
         )
         context.insert(observation)
         try context.save()
         schedulePublishToCloud()
     }
 
-    func updateObservation(_ observation: DailyObservation, type: ObservationType, note: String?) throws {
+    func updateObservation(_ observation: DailyObservation, type: ObservationType, note: String?, imageData: Data?) throws {
         guard !observation.isPublished else { return }
         let context = try requireContext()
         observation.type = type
         observation.note = normalizedNote(note)
+        let preparedImage = normalizedImage(imageData)
+        observation.imageData = preparedImage
+        if preparedImage == nil {
+            observation.imagePath = nil
+            observation.imageExpiresAt = nil
+        } else {
+            observation.imageExpiresAt = ObservationPhotoPolicy.expiryDate()
+        }
         observation.updatedAt = .now
         try context.save()
         schedulePublishToCloud()
@@ -345,9 +361,9 @@ final class AppSession {
     }
 
     func bothCompletedReview(reviewDate: Date) -> Bool {
-        let people = householdMembers
-        guard people.count == 2 else { return false }
-        return people.allSatisfy { hasCompletedReview(userId: $0.id, reviewDate: reviewDate) }
+        guard let userId = currentUserID, let partner else { return false }
+        return hasCompletedReview(userId: userId, reviewDate: reviewDate)
+            && hasCompletedReview(userId: partner.id, reviewDate: reviewDate)
     }
 
     private func hasCompletedReview(userId: UUID, reviewDate: Date) -> Bool {
@@ -357,7 +373,7 @@ final class AppSession {
             byAgreement[item.agreementId] = item
         }
         let myAgreements = applicableAgreements(for: userId)
-        let otherId = householdMembers.first(where: { $0.id != userId })?.id
+        let otherId = counterpartId(of: userId)
         let otherAgreements = otherId.map { applicableAgreements(for: $0) } ?? []
         guard !myAgreements.isEmpty || !otherAgreements.isEmpty else { return false }
 
@@ -464,7 +480,10 @@ final class AppSession {
             item.updatedAt = .now
         }
         try? context.save()
-        schedulePublishToCloud()
+        Task {
+            await publishToCloud(markFailure: false)
+            try? await HouseholdCloudStore.publishPendingObservations()
+        }
     }
 
     private func setCurrentUser(_ id: UUID) {
@@ -501,6 +520,96 @@ final class AppSession {
     private func normalizedNote(_ note: String?) -> String? {
         let value = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return value.isEmpty ? nil : String(value.prefix(300))
+    }
+
+    private func normalizedImage(_ data: Data?) -> Data? {
+        guard let data, !data.isEmpty else { return nil }
+        return ObservationPhoto.prepare(data) ?? data
+    }
+
+    private func mergedImage(remote: ObservationDTO, local: Data?) -> Data? {
+        if let expires = remote.imageExpiresAt, expires <= Date() {
+            return nil
+        }
+        if let data = remote.imageData, !data.isEmpty {
+            return data
+        }
+        if remote.imagePath == nil {
+            return nil
+        }
+        return local
+    }
+
+    private func matchingReflection(_ dto: ReflectionDTO, in existing: [WeeklyReflection]) -> WeeklyReflection? {
+        if let match = existing.first(where: { $0.id == dto.id }) {
+            return match
+        }
+        return existing.first {
+            $0.agreementId == dto.agreementId &&
+            $0.userId == dto.userId &&
+            AppWeek.isSameDay($0.weekStartDate, dto.weekStartDate)
+        }
+    }
+
+    private func remapCurrentUser(to authId: UUID) throws {
+        let context = try requireContext()
+        guard let oldId = currentUserID else {
+            setCurrentUser(authId)
+            return
+        }
+        guard oldId != authId else { return }
+        guard let oldUser = user(id: oldId) else {
+            setCurrentUser(authId)
+            return
+        }
+        if user(id: authId) == nil {
+            context.insert(User(id: authId, displayName: oldUser.displayName, createdAt: oldUser.createdAt))
+        }
+        for member in members() where member.userId == oldId {
+            member.userId = authId
+        }
+        for observation in allObservations() where observation.authorId == oldId {
+            observation.authorId = authId
+        }
+        for reflection in allReflections() where reflection.userId == oldId {
+            reflection.userId = authId
+        }
+        for agreement in allAgreements() where agreement.specificUserId == oldId {
+            agreement.specificUserId = authId
+        }
+        context.delete(oldUser)
+        try context.save()
+        setCurrentUser(authId)
+    }
+
+    private func bootstrapRemoteIfNeeded() async throws {
+        guard let household = currentHousehold, let user = currentUser else { return }
+        let code = InviteCode.normalize(household.inviteCode)
+        do {
+            try await HouseholdCloudStore.createHousehold(
+                id: household.id,
+                inviteCode: code,
+                displayName: user.displayName
+            )
+        } catch {
+            _ = try await HouseholdCloudStore.joinHousehold(
+                inviteCode: code,
+                displayName: user.displayName
+            )
+        }
+    }
+
+    private func purgeExpiredImages() {
+        guard let context = modelContext else { return }
+        var changed = false
+        for observation in allObservations() where observation.isImageExpired && observation.imageData != nil {
+            observation.imageData = nil
+            observation.imagePath = nil
+            changed = true
+        }
+        if changed {
+            try? context.save()
+        }
     }
 
     private func requireContext() throws -> ModelContext {
@@ -568,31 +677,42 @@ final class AppSession {
         return (try? modelContext.fetch(FetchDescriptor<Household>())) ?? []
     }
 
-    private func rememberCloudSlot(_ slot: Int, householdId: UUID) {
-        UserDefaults.standard.set(slot, forKey: cloudSlotPrefix + householdId.uuidString)
-    }
-
-    private func currentCloudSlot() -> Int? {
-        guard let householdId = currentHouseholdID else { return nil }
-        let key = cloudSlotPrefix + householdId.uuidString
-        if UserDefaults.standard.object(forKey: key) == nil {
-            return 0
-        }
-        return UserDefaults.standard.integer(forKey: key)
-    }
-
     func retryCloudPublish() async {
         await publishToCloud(markFailure: true)
     }
 
+    private func counterpartId(of userId: UUID) -> UUID? {
+        if userId == currentUserID {
+            return partner?.id
+        }
+        if userId == partner?.id {
+            return currentUserID
+        }
+        return householdMembers.first(where: { $0.id != userId })?.id
+    }
+
     func refreshFromCloud() async {
-        guard let code = currentHousehold?.inviteCode else { return }
+        guard currentHousehold != nil else { return }
+        guard SupabaseConfig.isConfigured else { return }
         do {
-            guard let remote = try await HouseholdCloudStore.fetchMerged(code: InviteCode.normalize(code)) else { return }
+            let authId = try await HouseholdCloudStore.ensureUser()
+            try remapCurrentUser(to: authId)
+            do {
+                try await bootstrapRemoteIfNeeded()
+            } catch {
+                // Local household can still be used until the next successful sync.
+            }
+            purgeExpiredImages()
+            await publishToCloud(markFailure: false)
+            guard let remote = try await HouseholdCloudStore.fetchHousehold() else {
+                cloudPublishFailed = true
+                return
+            }
             try installSnapshot(remote)
+            purgeExpiredImages()
             cloudPublishFailed = false
         } catch {
-            // Keep local data if the cloud copy cannot be read yet.
+            cloudPublishFailed = true
         }
     }
 
@@ -601,9 +721,14 @@ final class AppSession {
     }
 
     private func publishToCloud(markFailure: Bool) async {
-        guard let snapshot = makeSnapshot(), let slot = currentCloudSlot() else { return }
+        guard SupabaseConfig.isConfigured else {
+            if markFailure { cloudPublishFailed = true }
+            return
+        }
+        guard let snapshot = makeSnapshot() else { return }
         do {
-            try await HouseholdCloudStore.save(slot: slot, snapshot: snapshot)
+            _ = try await HouseholdCloudStore.ensureUser()
+            try await HouseholdCloudStore.save(snapshot: snapshot)
             cloudPublishFailed = false
         } catch {
             if markFailure {
@@ -649,7 +774,10 @@ final class AppSession {
                     createdAt: $0.createdAt,
                     updatedAt: $0.updatedAt,
                     deletedAt: $0.deletedAt,
-                    publishedAt: $0.publishedAt
+                    publishedAt: $0.publishedAt,
+                    imagePath: $0.imagePath,
+                    imageExpiresAt: $0.imageExpiresAt,
+                    imageData: $0.isImageExpired ? nil : $0.imageData
                 )
             },
             reflections: allReflections().filter { agreementIDs.contains($0.agreementId) }.map {
@@ -657,7 +785,7 @@ final class AppSession {
                     id: $0.id,
                     agreementId: $0.agreementId,
                     userId: $0.userId,
-                    weekStartDate: $0.weekStartDate,
+                    weekStartDate: AppWeek.startOfDay($0.weekStartDate),
                     applicable: $0.applicable,
                     selfReflectionRaw: $0.selfReflectionRaw,
                     otherApplicable: $0.otherApplicable,
@@ -699,6 +827,13 @@ final class AppSession {
                 context.insert(HouseholdMember(householdId: dto.householdId, userId: dto.userId, joinedAt: dto.joinedAt))
             }
         }
+        let remoteMemberKeys = Set(snapshot.members.map { "\($0.householdId.uuidString)-\($0.userId.uuidString)" })
+        for member in existingMembers where member.householdId == snapshot.household.id {
+            let key = "\(member.householdId.uuidString)-\(member.userId.uuidString)"
+            if !remoteMemberKeys.contains(key) {
+                context.delete(member)
+            }
+        }
 
         let existingAgreements = allAgreements()
         for dto in snapshot.agreements {
@@ -737,6 +872,9 @@ final class AppSession {
                     existing.updatedAt = dto.updatedAt
                     existing.deletedAt = dto.deletedAt
                     existing.publishedAt = dto.publishedAt
+                    existing.imagePath = dto.imagePath
+                    existing.imageExpiresAt = dto.imageExpiresAt
+                    existing.imageData = mergedImage(remote: dto, local: existing.imageData)
                 }
             } else {
                 context.insert(
@@ -746,6 +884,9 @@ final class AppSession {
                         authorId: dto.authorId,
                         type: ObservationType(rawValue: dto.typeRaw) ?? .other,
                         note: dto.note,
+                        imageData: dto.imageData,
+                        imagePath: dto.imagePath,
+                        imageExpiresAt: dto.imageExpiresAt,
                         createdAt: dto.createdAt,
                         updatedAt: dto.updatedAt,
                         deletedAt: dto.deletedAt,
@@ -757,21 +898,23 @@ final class AppSession {
 
         let existingReflections = allReflections()
         for dto in snapshot.reflections {
-            if let existing = existingReflections.first(where: { $0.id == dto.id }) {
+            let weekStart = AppWeek.startOfDay(dto.weekStartDate)
+            if let existing = matchingReflection(dto, in: existingReflections) {
                 if dto.completedAt >= existing.completedAt {
                     existing.applicable = dto.applicable
                     existing.selfReflectionRaw = dto.selfReflectionRaw
                     existing.otherApplicable = dto.otherApplicable
                     existing.otherReflectionRaw = dto.otherReflectionRaw
                     existing.completedAt = dto.completedAt
-                    existing.weekStartDate = dto.weekStartDate
+                    existing.weekStartDate = weekStart
+                    existing.userId = dto.userId
                 }
             } else {
                 let item = WeeklyReflection(
                     id: dto.id,
                     agreementId: dto.agreementId,
                     userId: dto.userId,
-                    weekStartDate: dto.weekStartDate,
+                    weekStartDate: weekStart,
                     applicable: dto.applicable,
                     otherApplicable: dto.otherApplicable,
                     completedAt: dto.completedAt
@@ -832,7 +975,7 @@ enum AppError: LocalizedError {
     case notReady
     case invalidInvite
     case householdFull
-    case cloudAccountNeeded
+    case notConfigured
     case cloudUnavailable
 
     var errorDescription: String? {
@@ -843,8 +986,8 @@ enum AppError: LocalizedError {
             return "招待コードが見つかりませんでした。"
         case .householdFull:
             return "この家庭はすでにふたりで始まっています。"
-        case .cloudAccountNeeded:
-            return "招待コードでつながるには、iCloudにサインインしてください。"
+        case .notConfigured:
+            return "まだサーバーの設定がありません。SupabaseConfig.swift に Project URL と anon key を入れてください。"
         case .cloudUnavailable:
             return "通信できませんでした。時間をおいてもう一度試してください。"
         }

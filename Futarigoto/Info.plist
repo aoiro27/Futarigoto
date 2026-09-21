@@ -35,6 +35,8 @@
 	<string>1</string>
 	<key>NSUserNotificationUsageDescription</key>
 	<string>週に一度、ふりかえりの時間をお知らせします。</string>
+	<key>NSCameraUsageDescription</key>
+	<string>今日の様子を写真に残すために、カメラを使います。</string>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>

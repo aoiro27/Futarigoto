@@ -1,5 +1,13 @@
 import Foundation
 
+enum ObservationPhotoPolicy {
+    static let lifetime: TimeInterval = 10 * 24 * 60 * 60
+
+    static func expiryDate(from date: Date = .now) -> Date {
+        date.addingTimeInterval(lifetime)
+    }
+}
+
 enum ScopeType: String, Codable, CaseIterable, Identifiable {
     case both = "BOTH"
     case conditional = "CONDITIONAL"
@@ -93,6 +101,14 @@ enum AppCopy {
     static let whatHappened = "どんなことがあった？"
     static let aWordTitle = "よかったら、ひとこと"
     static let aWordBody = "あとでふたりで振り返るときに分かるくらいで大丈夫です。"
+    static let addPhoto = "写真を添える"
+    static let changePhoto = "写真を変える"
+    static let removePhoto = "写真をはずす"
+    static let photoLibrary = "ライブラリから選ぶ"
+    static let takePhoto = "写真を撮る"
+    static let photoHint = "そのときの様子が、あとで見返しやすくなります。"
+    static let photoLoadFailedTitle = "写真を読み込めませんでした"
+    static let photoLoadFailedBody = "別の写真を選ぶか、もう一度試してみてください。"
     static let keepRecord = "残しておく"
     static let thisWeek = "今週のこと"
     static let applicableAsk = "いま、自分はこの約束はまもれているかな？"

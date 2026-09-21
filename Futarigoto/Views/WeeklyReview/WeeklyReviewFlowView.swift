@@ -134,6 +134,8 @@ struct WeeklyReviewFlowView: View {
                         .font(.bodyRounded(17))
                         .foregroundStyle(AppTheme.inkMuted)
 
+                    questionNotesSection(for: current)
+
                     VStack(alignment: .leading, spacing: 12) {
                         ForEach(SelfReflection.allCases) { option in
                             ChoiceCard(selected: answer.wrappedValue.applicable == true && answer.wrappedValue.reflection == option) {
@@ -194,7 +196,7 @@ struct WeeklyReviewFlowView: View {
                     title: session.partner == nil ? "ふりかえり" : "ふたりのふりかえり",
                     subtitle: session.partner == nil
                         ? "自分が残したことと、そのとき見えた想いです。"
-                        : "自分の評価と相手から見た評価を並べて、見え方のちがいを見られます。"
+                        : "ふたりとも、同じ評価と日々の記録が見えます。"
                 )
 
                 if householdAgreements.isEmpty {
@@ -237,39 +239,16 @@ struct WeeklyReviewFlowView: View {
             }
 
             if notes.isEmpty {
-                Text("このふりかえりで見えた日々の記録はありませんでした。")
+                Text("この日に残した記録はありませんでした。")
                     .font(.bodyRounded(14))
                     .foregroundStyle(AppTheme.inkMuted)
             } else {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("日々の想い")
+                    Text("日々の記録")
                         .font(.bodyRounded(13, weight: .semibold))
                         .foregroundStyle(AppTheme.terracotta)
                     ForEach(notes) { item in
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack(spacing: 8) {
-                                Text(authorName(item.authorId))
-                                    .font(.bodyRounded(14, weight: .medium))
-                                    .foregroundStyle(AppTheme.ink)
-                                Text(item.type.display)
-                                    .font(.bodyRounded(14, weight: .semibold))
-                                    .foregroundStyle(tone(item.type))
-                                Spacer()
-                                Text(AppWeek.dayLabel(for: item.createdAt))
-                                    .font(.bodyRounded(13))
-                                    .foregroundStyle(AppTheme.inkMuted)
-                            }
-                            if let note = item.note, !note.isEmpty {
-                                Text(note)
-                                    .font(.bodyRounded(15))
-                                    .foregroundStyle(AppTheme.ink)
-                                    .lineSpacing(3)
-                            }
-                        }
-                        .padding(14)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(AppTheme.creamDeep.opacity(0.65))
-                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        reviewNoteRow(item, showsAuthor: true)
                     }
                 }
             }
@@ -420,11 +399,64 @@ struct WeeklyReviewFlowView: View {
         }
     }
 
+    @ViewBuilder
+    private func questionNotesSection(for question: ReviewQuestion) -> some View {
+        if question.focus == .selfEval {
+            let notes = questionNotes(for: question)
+            VStack(alignment: .leading, spacing: 10) {
+                Text("自分が残したこと")
+                    .font(.bodyRounded(13, weight: .semibold))
+                    .foregroundStyle(AppTheme.terracotta)
+                if notes.isEmpty {
+                    Text("この日、この約束について残した記録はまだありません。")
+                        .font(.bodyRounded(14))
+                        .foregroundStyle(AppTheme.inkMuted)
+                } else {
+                    ForEach(notes) { item in
+                        reviewNoteRow(item, showsAuthor: false)
+                    }
+                }
+            }
+        }
+    }
+
+    private func reviewNoteRow(_ item: DailyObservation, showsAuthor: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                if showsAuthor {
+                    Text(authorName(item.authorId))
+                        .font(.bodyRounded(14, weight: .medium))
+                        .foregroundStyle(AppTheme.ink)
+                }
+                Text(item.type.display)
+                    .font(.bodyRounded(14, weight: .semibold))
+                    .foregroundStyle(tone(item.type))
+                Spacer()
+                Text(AppWeek.dayLabel(for: item.createdAt))
+                    .font(.bodyRounded(13))
+                    .foregroundStyle(AppTheme.inkMuted)
+            }
+            if let note = item.note, !note.isEmpty {
+                Text(note)
+                    .font(.bodyRounded(15))
+                    .foregroundStyle(AppTheme.ink)
+                    .lineSpacing(3)
+            }
+            if let data = item.visibleImageData {
+                ObservationPhotoView(data: data, height: 140)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.creamDeep.opacity(0.65))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
     private func recapPeople(for agreement: Agreement) -> [RecapPerson] {
         let members = session.householdMembers.sorted { lhs, rhs in
-            if lhs.id == session.currentUserID { return true }
-            if rhs.id == session.currentUserID { return false }
-            return lhs.displayName.localizedStandardCompare(rhs.displayName) == .orderedAscending
+            let byName = lhs.displayName.localizedStandardCompare(rhs.displayName)
+            if byName != .orderedSame { return byName == .orderedAscending }
+            return lhs.id.uuidString < rhs.id.uuidString
         }
         return members.compactMap { member in
             guard agreement.applies(to: member.id) else { return nil }
@@ -489,20 +521,60 @@ struct WeeklyReviewFlowView: View {
         }
     }
 
+    private func belongsToReview(_ item: DailyObservation) -> Bool {
+        if AppWeek.isSameDay(item.createdAt, reviewDate) {
+            return true
+        }
+        if let published = item.publishedAt {
+            return AppWeek.isSameDay(published, reviewDate)
+        }
+        return false
+    }
+
+    private func questionNotes(for question: ReviewQuestion) -> [DailyObservation] {
+        switch question.focus {
+        case .selfEval:
+            return observations
+                .filter {
+                    $0.agreementId == question.agreementId &&
+                    !$0.isDeleted &&
+                    $0.authorId == session.currentUserID &&
+                    belongsToReview($0)
+                }
+                .sorted(by: reviewNoteOrder)
+        case .partnerEval:
+            let canSeePartner = session.partner == nil || session.bothCompletedReview(reviewDate: reviewDate)
+            guard canSeePartner, let partnerId = session.partner?.id else { return [] }
+            return observations
+                .filter {
+                    $0.agreementId == question.agreementId &&
+                    !$0.isDeleted &&
+                    $0.authorId == partnerId &&
+                    belongsToReview($0)
+                }
+                .sorted(by: reviewNoteOrder)
+        }
+    }
+
     private func reviewNotes(for agreementId: UUID) -> [DailyObservation] {
-        let canSeePartner = session.partner == nil || session.bothCompletedReview(reviewDate: reviewDate)
-        let isToday = AppWeek.isSameDay(reviewDate, .now)
+        let revealShared = session.partner == nil || session.bothCompletedReview(reviewDate: reviewDate)
         return observations
             .filter { item in
                 guard item.agreementId == agreementId, !item.isDeleted else { return false }
-                let visible = canSeePartner || item.isPublished || item.authorId == session.currentUserID
-                guard visible else { return false }
-                if let published = item.publishedAt {
-                    return AppWeek.isSameDay(published, reviewDate)
-                }
-                return isToday
+                guard belongsToReview(item) else { return false }
+                return revealShared || item.authorId == session.currentUserID
             }
-            .sorted { $0.createdAt < $1.createdAt }
+            .sorted(by: reviewNoteOrder)
+    }
+
+    private func reviewNoteOrder(_ lhs: DailyObservation, _ rhs: DailyObservation) -> Bool {
+        if lhs.createdAt != rhs.createdAt {
+            return lhs.createdAt < rhs.createdAt
+        }
+        if lhs.authorId != rhs.authorId {
+            return lhs.authorId.uuidString < rhs.authorId.uuidString
+        }
+        return lhs.id.uuidString < rhs.id.uuidString
     }
 
     private func authorName(_ userId: UUID) -> String {

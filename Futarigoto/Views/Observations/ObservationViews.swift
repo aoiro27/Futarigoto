@@ -1,5 +1,9 @@
 import SwiftUI
 import SwiftData
+import PhotosUI
+import UIKit
+import UniformTypeIdentifiers
+import CoreTransferable
 
 struct ObservationListView: View {
     @Environment(AppSession.self) private var session
@@ -100,6 +104,9 @@ struct ObservationCard: View {
                     .foregroundStyle(AppTheme.inkMuted)
                     .lineSpacing(3)
             }
+            if let data = observation.visibleImageData {
+                ObservationPhotoView(data: data)
+            }
             if !observation.isPublished {
                 HStack(spacing: 16) {
                     Button("編集") { onEdit() }
@@ -144,6 +151,13 @@ struct ObservationFlowView: View {
     @State private var selectedAgreementID: UUID?
     @State private var selectedType: ObservationType?
     @State private var note = ""
+    @State private var imageData: Data?
+    @State private var pickerItem: PhotosPickerItem?
+    @State private var showsPhotoSource = false
+    @State private var showsLibrary = false
+    @State private var showsCamera = false
+    @State private var isLoadingPhoto = false
+    @State private var photoLoadFailed = false
 
     private var activeAgreements: [Agreement] {
         guard let householdId = session.currentHouseholdID else { return [] }
@@ -251,6 +265,8 @@ struct ObservationFlowView: View {
                     .foregroundStyle(AppTheme.inkMuted)
                     .frame(maxWidth: .infinity, alignment: .trailing)
 
+                photoSection
+
                 Button(AppCopy.keepRecord) {
                     save()
                 }
@@ -269,6 +285,79 @@ struct ObservationFlowView: View {
                 note = String(newValue.prefix(300))
             }
         }
+        .confirmationDialog(AppCopy.addPhoto, isPresented: $showsPhotoSource, titleVisibility: .visible) {
+            Button(AppCopy.photoLibrary) { showsLibrary = true }
+            if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                Button(AppCopy.takePhoto) { showsCamera = true }
+            }
+            if imageData != nil {
+                Button(AppCopy.removePhoto, role: .destructive) { imageData = nil }
+            }
+            Button(AppCopy.cancel, role: .cancel) {}
+        }
+        .photosPicker(isPresented: $showsLibrary, selection: $pickerItem, matching: .images)
+        .onChange(of: pickerItem) { _, item in
+            guard let item else { return }
+            loadPhoto(from: item)
+        }
+        .fullScreenCover(isPresented: $showsCamera) {
+            CameraPickerView { data in
+                showsCamera = false
+                guard let data else { return }
+                if let prepared = ObservationPhoto.prepare(data) {
+                    imageData = prepared
+                } else {
+                    photoLoadFailed = true
+                }
+            }
+            .ignoresSafeArea()
+        }
+        .alert(AppCopy.photoLoadFailedTitle, isPresented: $photoLoadFailed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(AppCopy.photoLoadFailedBody)
+        }
+    }
+
+    private var photoSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let imageData, let image = ObservationPhoto.image(from: imageData) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 180)
+                    .clipped()
+                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .accessibilityLabel("添付した写真")
+            }
+
+            Button {
+                showsPhotoSource = true
+            } label: {
+                HStack(spacing: 10) {
+                    if isLoadingPhoto {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "photo")
+                    }
+                    Text(imageData == nil ? AppCopy.addPhoto : AppCopy.changePhoto)
+                    Spacer(minLength: 0)
+                }
+                .font(.bodyRounded(16, weight: .medium))
+                .foregroundStyle(AppTheme.terracotta)
+                .padding(18)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .appCard()
+            }
+            .buttonStyle(.plain)
+            .disabled(isLoadingPhoto)
+
+            Text(AppCopy.photoHint)
+                .font(.bodyRounded(13))
+                .foregroundStyle(AppTheme.inkMuted)
+        }
     }
 
     private func populateIfEditing() {
@@ -276,6 +365,7 @@ struct ObservationFlowView: View {
         selectedAgreementID = editing.agreementId
         selectedType = editing.type
         note = editing.note ?? ""
+        imageData = editing.visibleImageData
         step = 3
     }
 
@@ -283,11 +373,133 @@ struct ObservationFlowView: View {
         guard let agreementId = selectedAgreementID, let type = selectedType else { return }
         do {
             if let editing {
-                try session.updateObservation(editing, type: type, note: note)
+                try session.updateObservation(editing, type: type, note: note, imageData: imageData)
             } else {
-                try session.addObservation(agreementId: agreementId, type: type, note: note)
+                try session.addObservation(agreementId: agreementId, type: type, note: note, imageData: imageData)
             }
             dismiss()
         } catch {}
+    }
+
+    private func loadPhoto(from item: PhotosPickerItem) {
+        isLoadingPhoto = true
+        Task {
+            let prepared: Data?
+            if let transfer = try? await item.loadTransferable(type: ObservationPhotoTransfer.self) {
+                prepared = ObservationPhoto.prepare(transfer.data)
+            } else if let data = try? await item.loadTransferable(type: Data.self) {
+                prepared = ObservationPhoto.prepare(data)
+            } else {
+                prepared = nil
+            }
+            await MainActor.run {
+                if let prepared {
+                    imageData = prepared
+                } else {
+                    photoLoadFailed = true
+                }
+                isLoadingPhoto = false
+                pickerItem = nil
+            }
+        }
+    }
+}
+
+struct ObservationPhotoView: View {
+    let data: Data
+    var height: CGFloat = 160
+    @State private var showsViewer = false
+
+    var body: some View {
+        if let image = ObservationPhoto.image(from: data) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(maxWidth: .infinity)
+                .frame(height: height)
+                .clipped()
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .onTapGesture { showsViewer = true }
+                .fullScreenCover(isPresented: $showsViewer) {
+                    ObservationPhotoViewer(image: image)
+                }
+                .accessibilityLabel("添付した写真")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint("拡大して見る")
+        }
+    }
+}
+
+struct ObservationPhotoViewer: View {
+    let image: UIImage
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .onTapGesture { dismiss() }
+            VStack {
+                HStack {
+                    Spacer()
+                    Button("とじる") { dismiss() }
+                        .font(.bodyRounded(16, weight: .medium))
+                        .foregroundStyle(.white)
+                        .padding(16)
+                }
+                Spacer()
+            }
+        }
+    }
+}
+
+struct CameraPickerView: UIViewControllerRepresentable {
+    var onFinish: (Data?) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onFinish: onFinish)
+    }
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.cameraCaptureMode = .photo
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let onFinish: (Data?) -> Void
+
+        init(onFinish: @escaping (Data?) -> Void) {
+            self.onFinish = onFinish
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            onFinish(nil)
+        }
+
+        func imagePickerController(
+            _ picker: UIImagePickerController,
+            didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
+        ) {
+            let image = (info[.originalImage] as? UIImage)
+            onFinish(image?.jpegData(compressionQuality: 0.9))
+        }
+    }
+}
+
+private struct ObservationPhotoTransfer: Transferable {
+    let data: Data
+
+    static var transferRepresentation: some TransferRepresentation {
+        DataRepresentation(importedContentType: .image) { data in
+            ObservationPhotoTransfer(data: data)
+        }
     }
 }

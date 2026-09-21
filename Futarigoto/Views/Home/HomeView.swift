@@ -168,6 +168,13 @@ struct HomeView: View {
                     .foregroundStyle(AppTheme.terracotta)
                     .frame(maxWidth: .infinity)
             }
+
+            if session.cloudPublishFailed {
+                Text("同期に失敗しました。右上の更新をもう一度試してください。")
+                    .font(.bodyRounded(14))
+                    .foregroundStyle(AppTheme.terracotta)
+                    .lineSpacing(3)
+            }
         }
         .padding(24)
         .frame(maxWidth: .infinity, alignment: .leading)

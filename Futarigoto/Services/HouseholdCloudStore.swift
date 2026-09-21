@@ -1,81 +1,335 @@
 import Foundation
-import CloudKit
+import Supabase
 
 enum HouseholdCloudStore {
-    static let containerIdentifier = "iCloud.jp.yukiusui.futarigoto"
-    private static let recordType = "HouseholdChunk"
-    private static let encoder: JSONEncoder = {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        return encoder
-    }()
-    private static let decoder: JSONDecoder = {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return decoder
-    }()
+    private static let photoBucket = "observation-photos"
 
-    private static var database: CKDatabase {
-        CKContainer(identifier: containerIdentifier).publicCloudDatabase
+    static func ensureUser() async throws -> UUID {
+        let client = try SupabaseConfig.client()
+        if let session = try? await client.auth.session {
+            return session.user.id
+        }
+        let session = try await client.auth.signInAnonymously()
+        return session.user.id
     }
 
-    static func save(slot: Int, snapshot: HouseholdSnapshot) async throws {
-        let recordID = CKRecord.ID(recordName: recordName(code: snapshot.household.inviteCode, slot: slot))
-        let record: CKRecord
+    static func createHousehold(id: UUID, inviteCode: String, displayName: String) async throws {
+        let client = try SupabaseConfig.client()
+        try await client
+            .rpc(
+                "create_household",
+                params: CreateHouseholdParams(
+                    householdId: id,
+                    inviteCode: inviteCode,
+                    displayName: displayName
+                )
+            )
+            .execute()
+    }
+
+    static func joinHousehold(inviteCode: String, displayName: String) async throws -> UUID {
+        let client = try SupabaseConfig.client()
+        let response = try await client
+            .rpc(
+                "join_household",
+                params: JoinHouseholdParams(
+                    inviteCode: inviteCode,
+                    displayName: displayName
+                )
+            )
+            .execute()
+        if let id = try? SupabaseConfig.makeDecoder().decode(UUID.self, from: response.data) {
+            return id
+        }
+        if let raw = String(data: response.data, encoding: .utf8)?
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\" \n")),
+           let id = UUID(uuidString: raw) {
+            return id
+        }
+        throw AppError.invalidInvite
+    }
+
+    static func fetchHousehold() async throws -> HouseholdSnapshot? {
+        let client = try SupabaseConfig.client()
+        _ = try? await client.rpc("cleanup_expired_observation_photos").execute()
+
+        let members: [MemberDTO] = try await client
+            .from("household_members")
+            .select()
+            .execute()
+            .value
+        guard let householdId = members.first?.householdId else {
+            return try await fetchHouseholdViaRPC()
+        }
+
+        let households: [HouseholdDTO] = try await client
+            .from("households")
+            .select()
+            .eq("id", value: householdId)
+            .limit(1)
+            .execute()
+            .value
+        guard let household = households.first else {
+            return try await fetchHouseholdViaRPC()
+        }
+
+        let userIds = members.map(\.userId.uuidString)
+        let users: [UserDTO] = userIds.isEmpty
+            ? []
+            : try await client
+                .from("profiles")
+                .select()
+                .in("id", values: userIds)
+                .execute()
+                .value
+
+        let agreements: [AgreementDTO] = try await client
+            .from("agreements")
+            .select()
+            .eq("household_id", value: householdId)
+            .execute()
+            .value
+
+        let agreementIds = agreements.map(\.id.uuidString)
+        var observations: [ObservationDTO] = []
+        var reflections: [ReflectionDTO] = []
+        if !agreementIds.isEmpty {
+            observations = (try? await client
+                .from("observations")
+                .select()
+                .in("agreement_id", values: agreementIds)
+                .execute()
+                .value) ?? []
+            reflections = try await client
+                .from("reflections")
+                .select()
+                .in("agreement_id", values: agreementIds)
+                .execute()
+                .value
+        }
+
+        var snapshot = HouseholdSnapshot(
+            household: household,
+            users: users,
+            members: members,
+            agreements: agreements,
+            observations: observations,
+            reflections: reflections
+        )
+        await attachImages(to: &snapshot)
+        return snapshot
+    }
+
+    static func save(snapshot: HouseholdSnapshot) async throws {
+        let client = try SupabaseConfig.client()
+        let userId = try await ensureUser()
+        _ = try? await client.rpc("cleanup_expired_observation_photos").execute()
+
+        let profiles = snapshot.users.filter { $0.id == userId }
+        if !profiles.isEmpty {
+            try await client.from("profiles").upsert(profiles).execute()
+        }
+
+        if !snapshot.agreements.isEmpty {
+            try await client.from("agreements").upsert(snapshot.agreements).execute()
+        }
+
+        let reflections = snapshot.reflections.filter { $0.userId == userId }
+        if !reflections.isEmpty {
+            try await client.from("reflections").upsert(
+                reflections,
+                onConflict: "agreement_id,user_id,week_start_date"
+            ).execute()
+        }
+
         do {
-            record = try await database.record(for: recordID)
-        } catch let error as CKError where error.code == .unknownItem {
-            record = CKRecord(recordType: recordType, recordID: recordID)
-        }
-        record["inviteCode"] = snapshot.household.inviteCode
-        record["slot"] = slot as CKRecordValue
-        record["payload"] = try encoder.encode(snapshot) as CKRecordValue
-        try await database.save(record)
-    }
-
-    static func fetch(slot: Int, code: String) async throws -> HouseholdSnapshot? {
-        let recordID = CKRecord.ID(recordName: recordName(code: code, slot: slot))
-        do {
-            let record = try await database.record(for: recordID)
-            guard let data = record["payload"] as? Data else { return nil }
-            return try decoder.decode(HouseholdSnapshot.self, from: data)
-        } catch let error as CKError where error.code == .unknownItem {
-            return nil
+            var snapshot = snapshot
+            try await syncImages(onto: &snapshot, householdId: snapshot.household.id, userId: userId)
+            let observations = snapshot.observations.filter { $0.authorId == userId }.map(ObservationRow.init)
+            if !observations.isEmpty {
+                try await client.from("observations").upsert(observations).execute()
+            }
+        } catch {
+            // 写真やメモの失敗で、すでに送ったふりかえりまで巻き戻さない。
         }
     }
 
-    static func fetchMerged(code: String) async throws -> HouseholdSnapshot? {
-        let slot0 = try await fetch(slot: 0, code: code)
-        let slot1 = try await fetch(slot: 1, code: code)
-        switch (slot0, slot1) {
-        case (nil, nil):
-            return nil
-        case (let first?, nil):
-            return first
-        case (nil, let second?):
-            return second
-        case (let first?, let second?):
-            return HouseholdSnapshot.merge(first, second)
-        }
+    static func publishPendingObservations() async throws {
+        let client = try SupabaseConfig.client()
+        try await client.rpc("publish_household_observations").execute()
     }
 
     static func mapCloudError(_ error: Error) -> AppError {
         if let appError = error as? AppError {
             return appError
         }
-        guard let ckError = error as? CKError else { return .cloudUnavailable }
-        switch ckError.code {
-        case .notAuthenticated, .permissionFailure:
-            return .cloudAccountNeeded
-        case .unknownItem:
+        let text = String(describing: error).lowercased()
+            + " "
+            + (error.localizedDescription.lowercased())
+        if text.contains("invalid invite") {
             return .invalidInvite
-        default:
-            return .cloudUnavailable
+        }
+        if text.contains("household full") {
+            return .householdFull
+        }
+        if text.contains("not configured") {
+            return .notConfigured
+        }
+        return .cloudUnavailable
+    }
+
+    private static func syncImages(onto snapshot: inout HouseholdSnapshot, householdId: UUID, userId: UUID) async throws {
+        let client = try SupabaseConfig.client()
+        let now = Date()
+        for index in snapshot.observations.indices {
+            guard snapshot.observations[index].authorId == userId else { continue }
+            let item = snapshot.observations[index]
+            let expired = item.imageExpiresAt.map { $0 <= now } ?? false
+            if expired || item.imageData == nil || item.imageData?.isEmpty == true {
+                if let path = item.imagePath, !path.isEmpty {
+                    _ = try? await client.storage.from(photoBucket).remove(paths: [path])
+                }
+                snapshot.observations[index].imagePath = nil
+                snapshot.observations[index].imageExpiresAt = nil
+                snapshot.observations[index].imageData = nil
+                continue
+            }
+            guard let data = item.imageData else { continue }
+            let path = "\(householdId.uuidString.lowercased())/\(item.id.uuidString.lowercased()).jpg"
+            try await client.storage.from(photoBucket).upload(
+                path,
+                data: data,
+                options: FileOptions(contentType: "image/jpeg", upsert: true)
+            )
+            snapshot.observations[index].imagePath = path
+            if snapshot.observations[index].imageExpiresAt == nil {
+                snapshot.observations[index].imageExpiresAt = ObservationPhotoPolicy.expiryDate(from: now)
+            }
         }
     }
 
-    private static func recordName(code: String, slot: Int) -> String {
-        "\(code)-\(slot)"
+    private static func fetchHouseholdViaRPC() async throws -> HouseholdSnapshot? {
+        let client = try SupabaseConfig.client()
+        let response = try await client.rpc("fetch_household_state").execute()
+        guard var snapshot = decodeSnapshot(from: response.data) else { return nil }
+        await attachImages(to: &snapshot)
+        return snapshot
+    }
+
+    private static func decodeSnapshot(from data: Data) -> HouseholdSnapshot? {
+        if data.isEmpty || data == Data("null".utf8) {
+            return nil
+        }
+        let decoder = SupabaseConfig.makeDecoder()
+        if let snapshot = try? decoder.decode(HouseholdSnapshot.self, from: data) {
+            return snapshot
+        }
+        if let wrapped = try? decoder.decode([HouseholdSnapshot].self, from: data) {
+            return wrapped.first
+        }
+        if let raw = try? decoder.decode(String.self, from: data),
+           let nested = raw.data(using: .utf8),
+           let snapshot = try? decoder.decode(HouseholdSnapshot.self, from: nested) {
+            return snapshot
+        }
+        return nil
+    }
+
+    private static func attachImages(to snapshot: inout HouseholdSnapshot) async {
+        guard let client = try? SupabaseConfig.client() else { return }
+        let now = Date()
+        await withTaskGroup(of: (UUID, Data?).self) { group in
+            for observation in snapshot.observations {
+                guard let path = observation.imagePath, !path.isEmpty else { continue }
+                if let expires = observation.imageExpiresAt, expires <= now { continue }
+                group.addTask {
+                    let data = try? await client.storage.from(photoBucket).download(path: path)
+                    return (observation.id, data)
+                }
+            }
+            var images: [UUID: Data] = [:]
+            for await (id, data) in group {
+                if let data, !data.isEmpty {
+                    images[id] = data
+                }
+            }
+            for index in snapshot.observations.indices {
+                let item = snapshot.observations[index]
+                if let expires = item.imageExpiresAt, expires <= now {
+                    snapshot.observations[index].imagePath = nil
+                    snapshot.observations[index].imageExpiresAt = nil
+                    snapshot.observations[index].imageData = nil
+                    continue
+                }
+                if let data = images[item.id] {
+                    snapshot.observations[index].imageData = data
+                }
+            }
+        }
+    }
+}
+
+private struct CreateHouseholdParams: Encodable {
+    var householdId: UUID
+    var inviteCode: String
+    var displayName: String
+
+    enum CodingKeys: String, CodingKey {
+        case householdId = "p_household_id"
+        case inviteCode = "p_invite_code"
+        case displayName = "p_display_name"
+    }
+}
+
+private struct JoinHouseholdParams: Encodable {
+    var inviteCode: String
+    var displayName: String
+
+    enum CodingKeys: String, CodingKey {
+        case inviteCode = "p_invite_code"
+        case displayName = "p_display_name"
+    }
+}
+
+private struct ObservationRow: Encodable {
+    var id: UUID
+    var agreementId: UUID
+    var authorId: UUID
+    var typeRaw: String
+    var note: String?
+    var createdAt: Date
+    var updatedAt: Date
+    var deletedAt: Date?
+    var publishedAt: Date?
+    var imagePath: String?
+    var imageExpiresAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case agreementId = "agreement_id"
+        case authorId = "author_id"
+        case typeRaw = "type_raw"
+        case note
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case deletedAt = "deleted_at"
+        case publishedAt = "published_at"
+        case imagePath = "image_path"
+        case imageExpiresAt = "image_expires_at"
+    }
+
+    init(_ dto: ObservationDTO) {
+        id = dto.id
+        agreementId = dto.agreementId
+        authorId = dto.authorId
+        typeRaw = dto.typeRaw
+        note = dto.note
+        createdAt = dto.createdAt
+        updatedAt = dto.updatedAt
+        deletedAt = dto.deletedAt
+        publishedAt = dto.publishedAt
+        imagePath = dto.imagePath
+        imageExpiresAt = dto.imageExpiresAt
     }
 }
 
@@ -86,55 +340,42 @@ struct HouseholdSnapshot: Codable {
     var agreements: [AgreementDTO]
     var observations: [ObservationDTO]
     var reflections: [ReflectionDTO]
-
-    static func merge(_ lhs: HouseholdSnapshot, _ rhs: HouseholdSnapshot) -> HouseholdSnapshot {
-        HouseholdSnapshot(
-            household: lhs.household.createdAt <= rhs.household.createdAt ? lhs.household : rhs.household,
-            users: merge(lhs.users, rhs.users, id: \.id, newer: { $0.createdAt >= $1.createdAt }),
-            members: merge(lhs.members, rhs.members, id: { "\($0.householdId.uuidString)-\($0.userId.uuidString)" }, newer: { $0.joinedAt >= $1.joinedAt }),
-            agreements: merge(lhs.agreements, rhs.agreements, id: \.id, newer: { $0.updatedAt >= $1.updatedAt }),
-            observations: merge(lhs.observations, rhs.observations, id: \.id, newer: { $0.updatedAt >= $1.updatedAt }),
-            reflections: merge(lhs.reflections, rhs.reflections, id: \.id, newer: { $0.completedAt >= $1.completedAt })
-        )
-    }
-
-    private static func merge<Item, ID: Hashable>(
-        _ lhs: [Item],
-        _ rhs: [Item],
-        id: (Item) -> ID,
-        newer: (Item, Item) -> Bool
-    ) -> [Item] {
-        var map: [ID: Item] = [:]
-        for item in lhs + rhs {
-            let key = id(item)
-            if let existing = map[key] {
-                if newer(item, existing) {
-                    map[key] = item
-                }
-            } else {
-                map[key] = item
-            }
-        }
-        return Array(map.values)
-    }
 }
 
 struct HouseholdDTO: Codable {
     var id: UUID
     var createdAt: Date
     var inviteCode: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case createdAt = "created_at"
+        case inviteCode = "invite_code"
+    }
 }
 
 struct UserDTO: Codable {
     var id: UUID
     var displayName: String
     var createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case displayName = "display_name"
+        case createdAt = "created_at"
+    }
 }
 
 struct MemberDTO: Codable {
     var householdId: UUID
     var userId: UUID
     var joinedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case householdId = "household_id"
+        case userId = "user_id"
+        case joinedAt = "joined_at"
+    }
 }
 
 struct AgreementDTO: Codable {
@@ -147,6 +388,18 @@ struct AgreementDTO: Codable {
     var createdAt: Date
     var updatedAt: Date
     var deletedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case householdId = "household_id"
+        case title
+        case scopeTypeRaw = "scope_type_raw"
+        case specificUserId = "specific_user_id"
+        case memo
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case deletedAt = "deleted_at"
+    }
 }
 
 struct ObservationDTO: Codable {
@@ -159,6 +412,23 @@ struct ObservationDTO: Codable {
     var updatedAt: Date
     var deletedAt: Date?
     var publishedAt: Date?
+    var imagePath: String?
+    var imageExpiresAt: Date?
+    var imageData: Data? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case agreementId = "agreement_id"
+        case authorId = "author_id"
+        case typeRaw = "type_raw"
+        case note
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case deletedAt = "deleted_at"
+        case publishedAt = "published_at"
+        case imagePath = "image_path"
+        case imageExpiresAt = "image_expires_at"
+    }
 }
 
 struct ReflectionDTO: Codable {
@@ -171,6 +441,18 @@ struct ReflectionDTO: Codable {
     var otherApplicable: Bool?
     var otherReflectionRaw: String?
     var completedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case agreementId = "agreement_id"
+        case userId = "user_id"
+        case weekStartDate = "week_start_date"
+        case applicable
+        case selfReflectionRaw = "self_reflection_raw"
+        case otherApplicable = "other_applicable"
+        case otherReflectionRaw = "other_reflection_raw"
+        case completedAt = "completed_at"
+    }
 }
 
 enum InviteCode {

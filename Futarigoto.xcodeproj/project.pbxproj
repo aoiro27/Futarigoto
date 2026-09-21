@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		2AFC026F37096F1D32A9432E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D50A9F5AA39461282850C68B /* Assets.xcassets */; };
+		E8C41B20A7D64C3F9E12F055 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = B22F9C03D5E1582A0F416C29 /* Supabase */; };
 		405FC315FBBC52B7534FF095 /* WeeklyReviewFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 021CD4C205063C8D4A49662B /* WeeklyReviewFlowView.swift */; };
 		4144289BFD42FB4572953B64 /* Domain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A072A4002C9C684FE16549D /* Domain.swift */; };
 		5727F7ED9A6E949DA27B9D85 /* FutarigotoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 918FBDDFC60AB4D278F7C6F1 /* FutarigotoApp.swift */; };
@@ -22,11 +23,15 @@
 		EE9EAA76874C3AB69981D1BD /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD562EB28C2575AF31123BE6 /* WelcomeView.swift */; };
 		EEC90D9127BB25C786611BD8 /* HouseholdCloudStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 855F261F508E4C360C26DD87 /* HouseholdCloudStore.swift */; };
 		FEEB46F81049C6DE34478E58 /* AppSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 098E1912FB1E3C26CF468D66 /* AppSession.swift */; };
+		C4D81A07E2B94F6A91C0D334 /* SupabaseConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B17E6A4C9D04E21B3F50817 /* SupabaseConfig.swift */; };
+		9D4E7B21C8F0436AA17E5906 /* ObservationPhoto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F8A3C29E4B6471D9C05A832 /* ObservationPhoto.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		021CD4C205063C8D4A49662B /* WeeklyReviewFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeeklyReviewFlowView.swift; sourceTree = "<group>"; };
 		098E1912FB1E3C26CF468D66 /* AppSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSession.swift; sourceTree = "<group>"; };
+		8B17E6A4C9D04E21B3F50817 /* SupabaseConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseConfig.swift; sourceTree = "<group>"; };
+		1F8A3C29E4B6471D9C05A832 /* ObservationPhoto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObservationPhoto.swift; sourceTree = "<group>"; };
 		28E98AEC0CD20ACCEDD3866D /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		30934F0B526F0BC4A69E4A5F /* Futarigoto.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Futarigoto.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		34C57CEB516107AC143DC93E /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
@@ -42,6 +47,17 @@
 		DD562EB28C2575AF31123BE6 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
 		F1EB9FEF036668E909AE9773 /* Entities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Entities.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		D4A91C77E0B84F2A8C13E046 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E8C41B20A7D64C3F9E12F055 /* Supabase in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		089485B4E4D459935AAD2994 /* Theme */ = {
@@ -150,6 +166,8 @@
 				6C4606A4CD4C251C384E6E6A /* AppWeek.swift */,
 				855F261F508E4C360C26DD87 /* HouseholdCloudStore.swift */,
 				CEBD551138A8524A37CC0F83 /* NotificationService.swift */,
+				1F8A3C29E4B6471D9C05A832 /* ObservationPhoto.swift */,
+				8B17E6A4C9D04E21B3F50817 /* SupabaseConfig.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -162,6 +180,7 @@
 			buildConfigurationList = C45ED3CBAB5C2E62C0E96660 /* Build configuration list for PBXNativeTarget "Futarigoto" */;
 			buildPhases = (
 				A3E85A3E82DFB93C6AD49C1A /* Sources */,
+				D4A91C77E0B84F2A8C13E046 /* Frameworks */,
 				6BEA1693D7FFFFFD6A91D790 /* Resources */,
 			);
 			buildRules = (
@@ -170,6 +189,7 @@
 			);
 			name = Futarigoto;
 			packageProductDependencies = (
+				B22F9C03D5E1582A0F416C29 /* Supabase */,
 			);
 			productName = Futarigoto;
 			productReference = 30934F0B526F0BC4A69E4A5F /* Futarigoto.app */;
@@ -203,6 +223,9 @@
 			productRefGroup = 3576CD2554E15BBE98076514 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
+			packageReferences = (
+				A11E8B92C4D0471F9E305B18 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
 			targets = (
 				EA13D35A7A3DF9B7B7EB95C8 /* Futarigoto */,
 			);
@@ -235,6 +258,8 @@
 				CC26F4D0EA55D90F18B740D7 /* HomeView.swift in Sources */,
 				EEC90D9127BB25C786611BD8 /* HouseholdCloudStore.swift in Sources */,
 				90B694956F2BCE9DC0539682 /* NotificationService.swift in Sources */,
+				9D4E7B21C8F0436AA17E5906 /* ObservationPhoto.swift in Sources */,
+				C4D81A07E2B94F6A91C0D334 /* SupabaseConfig.swift in Sources */,
 				68485FB983BA34037A12527D /* ObservationViews.swift in Sources */,
 				57D97B4977A0EB5566BB9D66 /* RootView.swift in Sources */,
 				405FC315FBBC52B7534FF095 /* WeeklyReviewFlowView.swift in Sources */,
@@ -436,6 +461,25 @@
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A11E8B92C4D0471F9E305B18 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift.git";
+			requirement = {
+				kind = exactVersion;
+				version = 2.49.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		B22F9C03D5E1582A0F416C29 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A11E8B92C4D0471F9E305B18 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 93B3800FCB98898DED09BAC7 /* Project object */;
 }
