@@ -89,6 +89,8 @@ enum AppCopy {
     static let applicableAsk = "いま、自分はこの約束はまもれているかな？"
     static let partnerAskSuffix = "は、この約束をまもれてた？"
     static let notThisWeek = "今回はなかった"
+    static let selfEvalLabel = "自己評価"
+    static let gapNote = "ふたりの見え方がちがっています"
     static let partnerFelt = "今週、相手が感じたこと"
     static let reviewDoneTitle = "今週のふりかえりはここまでです。"
     static let reviewDoneBody = "気になることがあれば、ふたりで話してみましょう。"

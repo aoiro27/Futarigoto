@@ -11,6 +11,7 @@ struct HomeView: View {
     @State private var showsObservation = false
     @State private var presentedReview: PresentedReview?
     @State private var showsInvite = false
+    @State private var isRefreshing = false
 
     private var householdAgreements: [Agreement] {
         guard let householdId = session.currentHouseholdID else { return [] }
@@ -39,6 +40,9 @@ struct HomeView: View {
                 .readableWidth()
             }
             .screenBackground()
+            .refreshable {
+                await reloadFromCloud()
+            }
             .overlay(alignment: .bottom) {
                 Button {
                     showsObservation = true
@@ -109,9 +113,32 @@ struct HomeView: View {
                     .font(.bodyRounded(14, weight: .medium))
                     .foregroundStyle(AppTheme.terracotta)
                 }
+
+                Button {
+                    Task { await reloadFromCloud() }
+                } label: {
+                    if isRefreshing {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                }
+                .font(.bodyRounded(16, weight: .medium))
+                .foregroundStyle(AppTheme.terracotta)
+                .frame(width: 28, height: 28)
+                .disabled(isRefreshing)
+                .accessibilityLabel("最新の状態を読み込む")
             }
         }
         .padding(.top, 8)
+    }
+
+    private func reloadFromCloud() async {
+        guard !isRefreshing else { return }
+        isRefreshing = true
+        defer { isRefreshing = false }
+        await session.refreshFromCloud()
     }
 
     @ViewBuilder

@@ -149,6 +149,10 @@ struct WeeklyReviewFlowView: View {
                 subtitle: "自分の入力は残りました。相手も終わると、ふたりの答えと日々の想いを一緒に見られます。今日はもう一度入力できません。"
             )
             Spacer()
+            Button("相手の入力を確認する") {
+                Task { await session.refreshFromCloud() }
+            }
+            .buttonStyle(PrimaryButtonStyle())
             Button("ホームにもどる") { dismiss() }
                 .buttonStyle(SecondaryButtonStyle())
         }

@@ -350,6 +350,23 @@ final class AppSession {
         return people.allSatisfy { hasCompletedReview(userId: $0.id, reviewDate: reviewDate) }
     }
 
+    private func hasCompletedReview(userId: UUID, reviewDate: Date) -> Bool {
+        let existing = reflections(userId: userId, reviewDate: reviewDate)
+        let byAgreement = Dictionary(uniqueKeysWithValues: existing.map { ($0.agreementId, $0) })
+        let myAgreements = applicableAgreements(for: userId)
+        let otherId = householdMembers.first(where: { $0.id != userId })?.id
+        let otherAgreements = otherId.map { applicableAgreements(for: $0) } ?? []
+        guard !myAgreements.isEmpty || !otherAgreements.isEmpty else { return false }
+
+        for agreement in myAgreements {
+            guard let item = byAgreement[agreement.id], item.hasSelfAnswer else { return false }
+        }
+        for agreement in otherAgreements {
+            guard let item = byAgreement[agreement.id], item.hasOtherAnswer else { return false }
+        }
+        return true
+    }
+
     func saveReflections(_ drafts: [ReflectionDraft], reviewDate: Date) throws {
         let context = try requireContext()
         guard let userId = currentUserID else { return }
@@ -627,6 +644,8 @@ final class AppSession {
                     weekStartDate: $0.weekStartDate,
                     applicable: $0.applicable,
                     selfReflectionRaw: $0.selfReflectionRaw,
+                    otherApplicable: $0.otherApplicable,
+                    otherReflectionRaw: $0.otherReflectionRaw,
                     completedAt: $0.completedAt
                 )
             }
@@ -726,6 +745,8 @@ final class AppSession {
                 if dto.completedAt >= existing.completedAt {
                     existing.applicable = dto.applicable
                     existing.selfReflectionRaw = dto.selfReflectionRaw
+                    existing.otherApplicable = dto.otherApplicable
+                    existing.otherReflectionRaw = dto.otherReflectionRaw
                     existing.completedAt = dto.completedAt
                     existing.weekStartDate = dto.weekStartDate
                 }
@@ -736,9 +757,11 @@ final class AppSession {
                     userId: dto.userId,
                     weekStartDate: dto.weekStartDate,
                     applicable: dto.applicable,
+                    otherApplicable: dto.otherApplicable,
                     completedAt: dto.completedAt
                 )
                 item.selfReflectionRaw = dto.selfReflectionRaw
+                item.otherReflectionRaw = dto.otherReflectionRaw
                 context.insert(item)
             }
         }
@@ -765,8 +788,10 @@ enum ScopeFormSelection: Hashable, Identifiable {
 
 struct ReflectionDraft: Identifiable {
     var agreementId: UUID
-    var applicable: Bool
+    var applicable: Bool?
     var selfReflection: SelfReflection?
+    var otherApplicable: Bool?
+    var otherReflection: SelfReflection?
 
     var id: UUID { agreementId }
 }
