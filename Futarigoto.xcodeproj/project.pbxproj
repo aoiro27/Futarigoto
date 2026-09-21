@@ -1,0 +1,440 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		2AFC026F37096F1D32A9432E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D50A9F5AA39461282850C68B /* Assets.xcassets */; };
+		405FC315FBBC52B7534FF095 /* WeeklyReviewFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 021CD4C205063C8D4A49662B /* WeeklyReviewFlowView.swift */; };
+		4144289BFD42FB4572953B64 /* Domain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A072A4002C9C684FE16549D /* Domain.swift */; };
+		5727F7ED9A6E949DA27B9D85 /* FutarigotoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 918FBDDFC60AB4D278F7C6F1 /* FutarigotoApp.swift */; };
+		57D97B4977A0EB5566BB9D66 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C565FE556198F49328E71639 /* RootView.swift */; };
+		68485FB983BA34037A12527D /* ObservationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6A23EF9C093AB0F42820A61 /* ObservationViews.swift */; };
+		801758ACDB9CA687ED3B08EE /* AppWeek.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C4606A4CD4C251C384E6E6A /* AppWeek.swift */; };
+		90B694956F2BCE9DC0539682 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEBD551138A8524A37CC0F83 /* NotificationService.swift */; };
+		BD753AFF1280E2BB4C010F04 /* Entities.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1EB9FEF036668E909AE9773 /* Entities.swift */; };
+		BF614DB65419C124DE54DFA6 /* AgreementViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65006F6FFD2985A256AF51E8 /* AgreementViews.swift */; };
+		CC26F4D0EA55D90F18B740D7 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34C57CEB516107AC143DC93E /* HomeView.swift */; };
+		ED768F0F6924A3C36E18036F /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28E98AEC0CD20ACCEDD3866D /* AppTheme.swift */; };
+		EE9EAA76874C3AB69981D1BD /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD562EB28C2575AF31123BE6 /* WelcomeView.swift */; };
+		FEEB46F81049C6DE34478E58 /* AppSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 098E1912FB1E3C26CF468D66 /* AppSession.swift */; };
+		9B2D4C6E81A04F3B9C7E1D55 /* HouseholdCloudStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C8E1F4A92B6471C8D0E5A77 /* HouseholdCloudStore.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		021CD4C205063C8D4A49662B /* WeeklyReviewFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeeklyReviewFlowView.swift; sourceTree = "<group>"; };
+		098E1912FB1E3C26CF468D66 /* AppSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSession.swift; sourceTree = "<group>"; };
+		3C8E1F4A92B6471C8D0E5A77 /* HouseholdCloudStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdCloudStore.swift; sourceTree = "<group>"; };
+		28E98AEC0CD20ACCEDD3866D /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
+		30934F0B526F0BC4A69E4A5F /* ふたりごと.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "ふたりごと.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		34C57CEB516107AC143DC93E /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		4A072A4002C9C684FE16549D /* Domain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Domain.swift; sourceTree = "<group>"; };
+		65006F6FFD2985A256AF51E8 /* AgreementViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgreementViews.swift; sourceTree = "<group>"; };
+		6C4606A4CD4C251C384E6E6A /* AppWeek.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppWeek.swift; sourceTree = "<group>"; };
+		918FBDDFC60AB4D278F7C6F1 /* FutarigotoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FutarigotoApp.swift; sourceTree = "<group>"; };
+		B6A23EF9C093AB0F42820A61 /* ObservationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObservationViews.swift; sourceTree = "<group>"; };
+		C565FE556198F49328E71639 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		CEBD551138A8524A37CC0F83 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
+		D50A9F5AA39461282850C68B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		DD562EB28C2575AF31123BE6 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
+		F1EB9FEF036668E909AE9773 /* Entities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Entities.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		089485B4E4D459935AAD2994 /* Theme */ = {
+			isa = PBXGroup;
+			children = (
+				28E98AEC0CD20ACCEDD3866D /* AppTheme.swift */,
+			);
+			path = Theme;
+			sourceTree = "<group>";
+		};
+		1DBC82C5BBA0D338D084E3EB /* Observations */ = {
+			isa = PBXGroup;
+			children = (
+				B6A23EF9C093AB0F42820A61 /* ObservationViews.swift */,
+			);
+			path = Observations;
+			sourceTree = "<group>";
+		};
+		232305F76DCFF1831EFDE999 /* Home */ = {
+			isa = PBXGroup;
+			children = (
+				34C57CEB516107AC143DC93E /* HomeView.swift */,
+			);
+			path = Home;
+			sourceTree = "<group>";
+		};
+		3576CD2554E15BBE98076514 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				30934F0B526F0BC4A69E4A5F /* ふたりごと.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		3DFCB2814483925CF239FE1E = {
+			isa = PBXGroup;
+			children = (
+				C163525B62449B28B0D03483 /* Futarigoto */,
+				3576CD2554E15BBE98076514 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		3FBC1239D88AC08E19E0976D /* Onboarding */ = {
+			isa = PBXGroup;
+			children = (
+				DD562EB28C2575AF31123BE6 /* WelcomeView.swift */,
+			);
+			path = Onboarding;
+			sourceTree = "<group>";
+		};
+		44E8ED76CB83F85DD8074A71 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				4A072A4002C9C684FE16549D /* Domain.swift */,
+				F1EB9FEF036668E909AE9773 /* Entities.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		5F824A331E1BD303635B712B /* WeeklyReview */ = {
+			isa = PBXGroup;
+			children = (
+				021CD4C205063C8D4A49662B /* WeeklyReviewFlowView.swift */,
+			);
+			path = WeeklyReview;
+			sourceTree = "<group>";
+		};
+		99053C3E0422E359D1167E47 /* Agreements */ = {
+			isa = PBXGroup;
+			children = (
+				65006F6FFD2985A256AF51E8 /* AgreementViews.swift */,
+			);
+			path = Agreements;
+			sourceTree = "<group>";
+		};
+		B9702CE1D578749658F750D6 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				C565FE556198F49328E71639 /* RootView.swift */,
+				99053C3E0422E359D1167E47 /* Agreements */,
+				232305F76DCFF1831EFDE999 /* Home */,
+				1DBC82C5BBA0D338D084E3EB /* Observations */,
+				3FBC1239D88AC08E19E0976D /* Onboarding */,
+				5F824A331E1BD303635B712B /* WeeklyReview */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		C163525B62449B28B0D03483 /* Futarigoto */ = {
+			isa = PBXGroup;
+			children = (
+				D50A9F5AA39461282850C68B /* Assets.xcassets */,
+				918FBDDFC60AB4D278F7C6F1 /* FutarigotoApp.swift */,
+				44E8ED76CB83F85DD8074A71 /* Models */,
+				D1F78184F6C6A08FED0A9653 /* Services */,
+				089485B4E4D459935AAD2994 /* Theme */,
+				B9702CE1D578749658F750D6 /* Views */,
+			);
+			path = Futarigoto;
+			sourceTree = "<group>";
+		};
+		D1F78184F6C6A08FED0A9653 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				098E1912FB1E3C26CF468D66 /* AppSession.swift */,
+				6C4606A4CD4C251C384E6E6A /* AppWeek.swift */,
+				3C8E1F4A92B6471C8D0E5A77 /* HouseholdCloudStore.swift */,
+				CEBD551138A8524A37CC0F83 /* NotificationService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		EA13D35A7A3DF9B7B7EB95C8 /* Futarigoto */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C45ED3CBAB5C2E62C0E96660 /* Build configuration list for PBXNativeTarget "Futarigoto" */;
+			buildPhases = (
+				A3E85A3E82DFB93C6AD49C1A /* Sources */,
+				6BEA1693D7FFFFFD6A91D790 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Futarigoto;
+			packageProductDependencies = (
+			);
+			productName = Futarigoto;
+			productReference = 30934F0B526F0BC4A69E4A5F /* ふたりごと.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		93B3800FCB98898DED09BAC7 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					EA13D35A7A3DF9B7B7EB95C8 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 707950AD42095BE987E07924 /* Build configuration list for PBXProject "Futarigoto" */;
+			developmentRegion = ja;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				ja,
+			);
+			mainGroup = 3DFCB2814483925CF239FE1E;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 3576CD2554E15BBE98076514 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				EA13D35A7A3DF9B7B7EB95C8 /* Futarigoto */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		6BEA1693D7FFFFFD6A91D790 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2AFC026F37096F1D32A9432E /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A3E85A3E82DFB93C6AD49C1A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BF614DB65419C124DE54DFA6 /* AgreementViews.swift in Sources */,
+				FEEB46F81049C6DE34478E58 /* AppSession.swift in Sources */,
+				9B2D4C6E81A04F3B9C7E1D55 /* HouseholdCloudStore.swift in Sources */,
+				ED768F0F6924A3C36E18036F /* AppTheme.swift in Sources */,
+				801758ACDB9CA687ED3B08EE /* AppWeek.swift in Sources */,
+				4144289BFD42FB4572953B64 /* Domain.swift in Sources */,
+				BD753AFF1280E2BB4C010F04 /* Entities.swift in Sources */,
+				5727F7ED9A6E949DA27B9D85 /* FutarigotoApp.swift in Sources */,
+				CC26F4D0EA55D90F18B740D7 /* HomeView.swift in Sources */,
+				90B694956F2BCE9DC0539682 /* NotificationService.swift in Sources */,
+				68485FB983BA34037A12527D /* ObservationViews.swift in Sources */,
+				57D97B4977A0EB5566BB9D66 /* RootView.swift in Sources */,
+				405FC315FBBC52B7534FF095 /* WeeklyReviewFlowView.swift in Sources */,
+				EE9EAA76874C3AB69981D1BD /* WelcomeView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		05BDFB4758C10CEC0FFF873E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_ENTITLEMENTS = Futarigoto/Futarigoto.entitlements;
+				DEVELOPMENT_TEAM = UMS95NYGUN;
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = Futarigoto/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "ふたりごと";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.lifestyle";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = jp.yukiusui.futarigoto;
+				PRODUCT_NAME = "ふたりごと";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		63F58143374BA9BAC74212A2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		6F7D95850D4DFB3F167AD67C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		87B65FCD5BFD1D8447E4C8FC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_ENTITLEMENTS = Futarigoto/Futarigoto.entitlements;
+				DEVELOPMENT_TEAM = UMS95NYGUN;
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = Futarigoto/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "ふたりごと";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.lifestyle";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = jp.yukiusui.futarigoto;
+				PRODUCT_NAME = "ふたりごと";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		707950AD42095BE987E07924 /* Build configuration list for PBXProject "Futarigoto" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6F7D95850D4DFB3F167AD67C /* Debug */,
+				63F58143374BA9BAC74212A2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C45ED3CBAB5C2E62C0E96660 /* Build configuration list for PBXNativeTarget "Futarigoto" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				05BDFB4758C10CEC0FFF873E /* Debug */,
+				87B65FCD5BFD1D8447E4C8FC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 93B3800FCB98898DED09BAC7 /* Project object */;
+}

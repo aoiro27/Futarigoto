@@ -1,6 +1,6 @@
-name: WagayanoYakusoku
+name: Futarigoto
 options:
-  bundleIdPrefix: com.wagayano
+  bundleIdPrefix: com.futarigoto
   deploymentTarget:
     iOS: "17.0"
   createIntermediateGroups: true
@@ -9,21 +9,22 @@ settings:
   SWIFT_VERSION: "5.0"
   IPHONEOS_DEPLOYMENT_TARGET: "17.0"
 targets:
-  WagayanoYakusoku:
+  Futarigoto:
     type: application
     platform: iOS
     sources:
-      - path: WagayanoYakusoku
+      - path: Futarigoto
         excludes:
           - Info.plist
+          - Futarigoto.entitlements
     resources:
-      - path: WagayanoYakusoku/Assets.xcassets
+      - path: Futarigoto/Assets.xcassets
         type: folder
     info:
-      path: WagayanoYakusoku/Info.plist
+      path: Futarigoto/Info.plist
       properties:
-        CFBundleDisplayName: わが家の約束
-        CFBundleName: わが家の約束
+        CFBundleDisplayName: ふたりごと
+        CFBundleName: ふたりごと
         CFBundleShortVersionString: "1.0"
         CFBundleVersion: "1"
         UILaunchScreen:
@@ -37,19 +38,27 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         CFBundleURLTypes:
           - CFBundleTypeRole: Editor
-            CFBundleURLName: com.wagayano.yakusoku
+            CFBundleURLName: jp.yukiusui.futarigoto
             CFBundleURLSchemes:
-              - wagayano-yakusoku
+              - futarigoto
         NSUserNotificationUsageDescription: 週に一度、ふりかえりの時間をお知らせします。
     settings:
-      PRODUCT_BUNDLE_IDENTIFIER: com.wagayano.yakusoku
-      PRODUCT_NAME: わが家の約束
+      PRODUCT_BUNDLE_IDENTIFIER: jp.yukiusui.futarigoto
+      PRODUCT_NAME: ふたりごと
       TARGETED_DEVICE_FAMILY: "1,2"
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
-      INFOPLIST_KEY_CFBundleDisplayName: わが家の約束
+      INFOPLIST_KEY_CFBundleDisplayName: ふたりごと
       INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.lifestyle
-      DEVELOPMENT_TEAM: ""
+      DEVELOPMENT_TEAM: "UMS95NYGUN"
       CODE_SIGN_STYLE: Automatic
+      CODE_SIGN_ENTITLEMENTS: Futarigoto/Futarigoto.entitlements
       SWIFT_EMIT_LOC_STRINGS: "YES"
       ENABLE_PREVIEWS: "YES"
+    entitlements:
+      path: Futarigoto/Futarigoto.entitlements
+      properties:
+        com.apple.developer.icloud-container-identifiers:
+          - iCloud.jp.yukiusui.futarigoto
+        com.apple.developer.icloud-services:
+          - CloudKit
