@@ -296,7 +296,7 @@ begin
   where user_id = v_user;
 
   if v_existing is not null then
-    return v_existing;
+    raise exception 'already in a household';
   end if;
 
   insert into public.households (id, invite_code)
@@ -328,7 +328,7 @@ begin
   from public.household_members
   where user_id = v_user;
   if v_existing is not null then
-    return v_existing;
+    raise exception 'already in a household';
   end if;
 
   raise exception 'could not create household';

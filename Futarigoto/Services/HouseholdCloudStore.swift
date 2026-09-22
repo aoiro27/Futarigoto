@@ -4,6 +4,10 @@ import Supabase
 enum HouseholdCloudStore {
     private static let photoBucket = "observation-photos"
 
+    private enum AuthHouseholdError: Error {
+        case alreadyInHousehold
+    }
+
     static func ensureUser() async throws -> UUID {
         let client = try SupabaseConfig.client()
         if let session = try? await client.auth.session {
@@ -13,18 +17,19 @@ enum HouseholdCloudStore {
         return session.user.id
     }
 
-    static func createHousehold(id: UUID, inviteCode: String, displayName: String) async throws {
+    static func currentUserId() async throws -> UUID {
         let client = try SupabaseConfig.client()
-        try await client
-            .rpc(
-                "create_household",
-                params: CreateHouseholdParams(
-                    householdId: id,
-                    inviteCode: inviteCode,
-                    displayName: displayName
-                )
-            )
-            .execute()
+        return try await client.auth.session.user.id
+    }
+
+    static func createHousehold(id: UUID, inviteCode: String, displayName: String) async throws {
+        do {
+            try await createHouseholdOnce(id: id, inviteCode: inviteCode, displayName: displayName)
+        } catch {
+            guard isAlreadyInHousehold(error) else { throw error }
+            _ = try await signInFreshUser()
+            try await createHouseholdOnce(id: id, inviteCode: inviteCode, displayName: displayName)
+        }
     }
 
     static func joinHousehold(inviteCode: String, displayName: String) async throws -> UUID {
@@ -34,6 +39,23 @@ enum HouseholdCloudStore {
             guard isAlreadyInHousehold(error) else { throw error }
             _ = try await signInFreshUser()
             return try await joinHouseholdOnce(inviteCode: inviteCode, displayName: displayName)
+        }
+    }
+
+    private static func createHouseholdOnce(id: UUID, inviteCode: String, displayName: String) async throws {
+        let client = try SupabaseConfig.client()
+        let response = try await client
+            .rpc(
+                "create_household",
+                params: CreateHouseholdParams(
+                    householdId: id,
+                    inviteCode: inviteCode,
+                    displayName: displayName
+                )
+            )
+            .execute()
+        if let createdId = decodeUUID(from: response.data), createdId != id {
+            throw AuthHouseholdError.alreadyInHousehold
         }
     }
 
@@ -48,15 +70,13 @@ enum HouseholdCloudStore {
                 )
             )
             .execute()
-        if let id = try? SupabaseConfig.makeDecoder().decode(UUID.self, from: response.data) {
+        if let id = decodeUUID(from: response.data) {
             return id
         }
-        if let raw = String(data: response.data, encoding: .utf8)?
-            .trimmingCharacters(in: CharacterSet(charactersIn: "\" \n")),
-           let id = UUID(uuidString: raw) {
-            return id
+        if let remote = try await fetchHousehold() {
+            return remote.household.id
         }
-        throw AppError.invalidInvite
+        throw AppError.cloudUnavailable
     }
 
     private static func signInFreshUser() async throws -> UUID {
@@ -67,10 +87,30 @@ enum HouseholdCloudStore {
     }
 
     private static func isAlreadyInHousehold(_ error: Error) -> Bool {
+        if error is AuthHouseholdError {
+            return true
+        }
         let text = String(describing: error).lowercased()
             + " "
             + error.localizedDescription.lowercased()
         return text.contains("already in a household")
+    }
+
+    private static func decodeUUID(from data: Data) -> UUID? {
+        let decoder = SupabaseConfig.makeDecoder()
+        if let id = try? decoder.decode(UUID.self, from: data) {
+            return id
+        }
+        if let ids = try? decoder.decode([UUID].self, from: data) {
+            return ids.first
+        }
+        guard var raw = String(data: data, encoding: .utf8) else { return nil }
+        raw = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        raw = raw.trimmingCharacters(in: CharacterSet(charactersIn: "\"[]"))
+        if let comma = raw.split(separator: ",").first {
+            raw = String(comma).trimmingCharacters(in: CharacterSet(charactersIn: "\" "))
+        }
+        return UUID(uuidString: raw)
     }
 
     static func fetchHousehold() async throws -> HouseholdSnapshot? {
@@ -553,21 +593,49 @@ enum InviteCode {
         String((0..<6).compactMap { _ in alphabet.randomElement() })
     }
 
+    static func isValid(_ code: String) -> Bool {
+        code.count == 6 && code.allSatisfy { alphabet.contains($0) }
+    }
+
     static func normalize(_ raw: String) -> String {
         let mapped = (raw.applyingTransform(.fullwidthToHalfwidth, reverse: false) ?? raw)
             .uppercased()
 
-        if let fromURL = extractURL(from: mapped), let code = code(from: fromURL) {
+        if let fromURL = extractURL(from: mapped), let code = code(from: fromURL), isValid(code) {
             return code
         }
 
         if let regex = try? NSRegularExpression(pattern: #"招待コード[:：]\s*([A-Z0-9]+)"#),
            let match = regex.firstMatch(in: mapped, range: NSRange(mapped.startIndex..., in: mapped)),
            let range = Range(match.range(at: 1), in: mapped) {
-            return String(mapped[range]).filter { alphabet.contains($0) }
+            let labeled = String(mapped[range]).filter { alphabet.contains($0) }
+            if isValid(labeled) {
+                return labeled
+            }
         }
 
-        return mapped.filter { alphabet.contains($0) }
+        let filtered = mapped.filter { alphabet.contains($0) }
+        if isValid(filtered) {
+            return filtered
+        }
+
+        if let consecutive = firstValidCode(in: mapped) {
+            return consecutive
+        }
+
+        return filtered
+    }
+
+    private static func firstValidCode(in text: String) -> String? {
+        let chars = Array(text)
+        guard chars.count >= 6 else { return nil }
+        for start in 0...(chars.count - 6) {
+            let candidate = String(chars[start..<(start + 6)])
+            if isValid(candidate) {
+                return candidate
+            }
+        }
+        return nil
     }
 
     static func code(from url: URL) -> String? {

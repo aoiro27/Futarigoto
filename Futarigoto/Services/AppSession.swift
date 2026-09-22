@@ -111,32 +111,38 @@ final class AppSession {
     // MARK: - Onboarding
 
     func createUserAndHousehold(displayName: String) async throws {
-        let context = try requireContext()
         let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
         let householdId = UUID()
         let inviteCode = InviteCode.make()
         let userId: UUID
+        let remote: HouseholdSnapshot
         do {
-            userId = try await HouseholdCloudStore.ensureUser()
+            _ = try await HouseholdCloudStore.ensureUser()
             try await HouseholdCloudStore.createHousehold(
                 id: householdId,
                 inviteCode: inviteCode,
                 displayName: trimmed
             )
+            userId = try await HouseholdCloudStore.currentUserId()
+            guard let fetched = try await HouseholdCloudStore.fetchHousehold() else {
+                throw AppError.cloudUnavailable
+            }
+            remote = fetched
+        } catch let error as AppError {
+            throw error
         } catch {
             throw HouseholdCloudStore.mapCloudError(error)
         }
 
-        let user = User(id: userId, displayName: trimmed)
-        let household = Household(id: householdId, inviteCode: inviteCode)
-        let member = HouseholdMember(householdId: household.id, userId: user.id)
-        context.insert(user)
-        context.insert(household)
-        context.insert(member)
-        try context.save()
-        setCurrentUser(user.id)
+        try installSnapshot(remote)
+        if user(id: userId) == nil {
+            let context = try requireContext()
+            context.insert(User(id: userId, displayName: trimmed))
+            try context.save()
+        }
+        setCurrentUser(userId)
         showsPostCreateInvite = true
         markRemoteHouseholdConfirmed()
         NotificationService.shared.requestAuthorization()
@@ -152,7 +158,7 @@ final class AppSession {
         let context = try requireContext()
         let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalized = InviteCode.normalize(code)
-        guard !trimmed.isEmpty, !normalized.isEmpty else {
+        guard !trimmed.isEmpty, InviteCode.isValid(normalized) else {
             throw AppError.invalidInvite
         }
 
@@ -163,9 +169,9 @@ final class AppSession {
                 inviteCode: normalized,
                 displayName: trimmed
             )
-            userId = try await HouseholdCloudStore.ensureUser()
+            userId = try await HouseholdCloudStore.currentUserId()
             guard let remote = try await HouseholdCloudStore.fetchHousehold() else {
-                throw AppError.invalidInvite
+                throw AppError.cloudUnavailable
             }
             try installSnapshot(remote)
             markRemoteHouseholdConfirmed()
