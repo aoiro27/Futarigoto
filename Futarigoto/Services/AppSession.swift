@@ -158,11 +158,12 @@ final class AppSession {
 
         let userId: UUID
         do {
-            userId = try await HouseholdCloudStore.ensureUser()
+            _ = try await HouseholdCloudStore.ensureUser()
             _ = try await HouseholdCloudStore.joinHousehold(
                 inviteCode: normalized,
                 displayName: trimmed
             )
+            userId = try await HouseholdCloudStore.ensureUser()
             guard let remote = try await HouseholdCloudStore.fetchHousehold() else {
                 throw AppError.invalidInvite
             }

@@ -6,9 +6,6 @@ enum HouseholdCloudStore {
 
     static func ensureUser() async throws -> UUID {
         let client = try SupabaseConfig.client()
-        if let session = client.auth.currentSession, !session.isExpired {
-            return session.user.id
-        }
         if let session = try? await client.auth.session {
             return session.user.id
         }
@@ -31,6 +28,16 @@ enum HouseholdCloudStore {
     }
 
     static func joinHousehold(inviteCode: String, displayName: String) async throws -> UUID {
+        do {
+            return try await joinHouseholdOnce(inviteCode: inviteCode, displayName: displayName)
+        } catch {
+            guard isAlreadyInHousehold(error) else { throw error }
+            _ = try await signInFreshUser()
+            return try await joinHouseholdOnce(inviteCode: inviteCode, displayName: displayName)
+        }
+    }
+
+    private static func joinHouseholdOnce(inviteCode: String, displayName: String) async throws -> UUID {
         let client = try SupabaseConfig.client()
         let response = try await client
             .rpc(
@@ -52,17 +59,25 @@ enum HouseholdCloudStore {
         throw AppError.invalidInvite
     }
 
+    private static func signInFreshUser() async throws -> UUID {
+        let client = try SupabaseConfig.client()
+        try? await client.auth.signOut()
+        let session = try await client.auth.signInAnonymously()
+        return session.user.id
+    }
+
+    private static func isAlreadyInHousehold(_ error: Error) -> Bool {
+        let text = String(describing: error).lowercased()
+            + " "
+            + error.localizedDescription.lowercased()
+        return text.contains("already in a household")
+    }
+
     static func fetchHousehold() async throws -> HouseholdSnapshot? {
         do {
             return try await fetchHouseholdViaRPC()
-        } catch is SnapshotDecodeError {
-            return try await fetchHouseholdFromTables()
         } catch {
-            let text = String(describing: error).lowercased()
-            if text.contains("does not exist") || text.contains("pgrst202") || text.contains("404") {
-                return try await fetchHouseholdFromTables()
-            }
-            throw error
+            return try await fetchHouseholdFromTables()
         }
     }
 
