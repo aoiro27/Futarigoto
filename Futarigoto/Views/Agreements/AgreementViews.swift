@@ -17,36 +17,30 @@ struct AgreementListView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    ScreenHeader(
-                        title: AppCopy.agreements,
-                        subtitle: "ふたりで話して決めたことを、ここに残します。"
-                    )
+                    ScreenHeader(eyebrow: "OUR LITTLE PROMISES", title: AppCopy.agreements)
 
-                    Button("約束を追加する") {
+                    IllustratedBanner(title: "心地よい毎日を、ふたりで。", subtitle: "わが家で大切にしたいことを、ここに。", scene: .promises, color: AppTheme.sageSoft)
+
+                    Button {
                         showsForm = true
+                    } label: {
+                        Label("約束をつくる", systemImage: "plus")
                     }
-                    .buttonStyle(SecondaryButtonStyle())
+                    .buttonStyle(PrimaryButtonStyle())
 
                     if householdAgreements.isEmpty {
-                        EmptyNote(text: "まだ約束はありません。家で大切にしたいことを、一文で残してみましょう。")
+                        EmptyNote(text: "ふたりらしい約束を。", symbol: "heart", detail: "小さなことからで大丈夫。\nまずはひとつ、話してみませんか。")
                     } else {
                         VStack(spacing: 10) {
-                            ForEach(householdAgreements) { agreement in
+                            ForEach(Array(householdAgreements.enumerated()), id: \.element.id) { index, agreement in
                                 NavigationLink {
                                     AgreementDetailView(agreementID: agreement.id)
                                 } label: {
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        Text(agreement.title)
-                                            .font(.bodyRounded(17, weight: .medium))
-                                            .foregroundStyle(AppTheme.ink)
-                                            .multilineTextAlignment(.leading)
-                                        Text(session.scopeDisplay(for: agreement))
-                                            .font(.bodyRounded(13))
-                                            .foregroundStyle(AppTheme.inkMuted)
-                                    }
-                                    .padding(18)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .appCard()
+                                    AgreementTile(
+                                        title: agreement.title,
+                                        subtitle: session.scopeDisplay(for: agreement),
+                                        index: index
+                                    )
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -151,7 +145,7 @@ struct AgreementDetailView: View {
                 .font(.titleRounded(22))
                 .foregroundStyle(AppTheme.ink)
             if weeks.isEmpty {
-                Text("まだ記録はありません。")
+                Text("まだ記録はありません")
                     .font(.bodyRounded(15))
                     .foregroundStyle(AppTheme.inkMuted)
             } else {
@@ -216,13 +210,6 @@ struct AgreementFormView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
-                    if isEdit {
-                        Text(AppCopy.talkFirst)
-                            .font(.bodyRounded(15))
-                            .foregroundStyle(AppTheme.inkMuted)
-                            .padding(.bottom, -8)
-                    }
-
                     VStack(alignment: .leading, spacing: 12) {
                         Text(AppCopy.whatAgreement)
                             .font(.titleRounded(24))

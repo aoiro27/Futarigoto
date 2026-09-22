@@ -6,10 +6,15 @@ struct WelcomeView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
+            ScrollView {
             VStack(spacing: 0) {
-                Spacer()
+                Text("ふたりの暮らしに、小さな花を。")
+                    .font(.bodyRounded(14, weight: .medium))
+                    .foregroundStyle(AppTheme.terracotta)
+                    .padding(.top, 36)
+                    .padding(.bottom, 28)
                 WelcomeIllustration()
-                    .padding(.bottom, 36)
+                    .padding(.bottom, 28)
 
                 Text(AppCopy.welcomeTitle)
                     .font(.titleRounded(32))
@@ -17,14 +22,12 @@ struct WelcomeView: View {
                     .multilineTextAlignment(.center)
                     .lineSpacing(8)
 
-                Text(AppCopy.welcomeBody)
+                Text("伝えることから、\nもっと心地よい、わが家へ。")
                     .font(.bodyRounded(16))
                     .foregroundStyle(AppTheme.inkMuted)
                     .multilineTextAlignment(.center)
                     .lineSpacing(6)
                     .padding(.top, 20)
-
-                Spacer()
 
                 VStack(spacing: 14) {
                     Button(AppCopy.start) {
@@ -36,11 +39,14 @@ struct WelcomeView: View {
                         path.append(.join)
                     }
                     .buttonStyle(QuietButtonStyle())
+                    .frame(minHeight: 44)
                 }
+                .padding(.top, 36)
             }
             .padding(.horizontal, 28)
             .padding(.bottom, 28)
             .readableWidth()
+            }
             .screenBackground()
             .navigationDestination(for: OnboardingRoute.self) { route in
                 switch route {
@@ -67,35 +73,12 @@ enum OnboardingRoute: Hashable {
 
 struct WelcomeIllustration: View {
     var body: some View {
-        ZStack {
-            Circle()
-                .fill(AppTheme.sageSoft)
-                .frame(width: 148, height: 148)
-                .offset(x: -28, y: 8)
-            Circle()
-                .fill(AppTheme.terracottaSoft)
-                .frame(width: 148, height: 148)
-                .offset(x: 28, y: -8)
-            RoundedRectangle(cornerRadius: 32, style: .continuous)
-                .fill(AppTheme.paper)
-                .frame(width: 112, height: 112)
-                .rotationEffect(.degrees(-8))
-                .shadow(color: AppTheme.terracotta.opacity(0.08), radius: 16, y: 8)
-            Image(systemName: "house")
-                .font(.system(size: 48, weight: .ultraLight, design: .rounded))
-                .foregroundStyle(AppTheme.terracotta)
-            Image(systemName: "heart.fill")
-                .font(.system(size: 16, weight: .regular, design: .rounded))
-                .foregroundStyle(AppTheme.terracotta)
-                .offset(y: 8)
-            Image(systemName: "leaf.fill")
-                .font(.system(size: 26, weight: .light))
-                .foregroundStyle(AppTheme.sage)
-                .rotationEffect(.degrees(-25))
-                .offset(x: -75, y: 48)
-        }
-        .frame(height: 170)
-        .accessibilityHidden(true)
+        TogetherIllustration()
+            .frame(maxWidth: 360)
+            .padding(12)
+            .background(AppTheme.terracottaSoft, in: RoundedRectangle(cornerRadius: 48))
+            .rotationEffect(.degrees(-3))
+            .accessibilityHidden(true)
     }
 }
 
@@ -115,22 +98,13 @@ struct CreateUserView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
-                ScreenHeader(
-                    title: AppCopy.yourName,
-                    subtitle: mode == .join
-                        ? "パートナーが渡してくれたコードで、同じ家庭に入ります。"
-                        : "家のなかで呼び合う名前で大丈夫です。"
-                )
+                ScreenHeader(title: AppCopy.yourName)
 
                 VStack(alignment: .leading, spacing: 8) {
                     TextField("ゆうき", text: $name)
                         .font(.bodyRounded(20))
                         .padding(18)
                         .appCard()
-                    Text("例：ゆうき")
-                        .font(.bodyRounded(13))
-                        .foregroundStyle(AppTheme.inkMuted)
-                        .padding(.leading, 6)
                 }
 
                 if mode == .join {
@@ -212,10 +186,7 @@ struct InvitePartnerView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                ScreenHeader(
-                    title: AppCopy.startTogetherTitle,
-                    subtitle: AppCopy.startTogetherBody
-                )
+                ScreenHeader(title: AppCopy.startTogetherTitle)
 
                 VStack(alignment: .leading, spacing: 12) {
                     Text("招待コード")
@@ -225,39 +196,31 @@ struct InvitePartnerView: View {
                         .font(.titleRounded(36))
                         .foregroundStyle(AppTheme.ink)
                         .tracking(4)
-                    Text("このコードをパートナーに渡してください。相手の端末で同じコードを入力すると、同じ家庭につながります。")
-                        .font(.bodyRounded(15))
-                        .foregroundStyle(AppTheme.inkMuted)
                 }
                 .padding(24)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .appCard()
 
-                Button("招待を送る") {
+                Button("送る") {
                     showsShare = true
                 }
                 .buttonStyle(PrimaryButtonStyle())
 
                 if session.cloudPublishFailed {
-                    Text("まだ相手と共有できていません。通信できる場所でもう一度試してください。")
+                    Text("共有できませんでした。通信できる場所でもう一度試してください。")
                         .font(.bodyRounded(14))
                         .foregroundStyle(AppTheme.terracotta)
-                    Button("共有し直す") {
+                    Button("もう一度") {
                         Task { await session.retryCloudPublish() }
                     }
                     .buttonStyle(SecondaryButtonStyle())
                 }
 
-                Button("ホームへ進む") {
+                Button("あとで") {
                     session.dismissPostCreateInvite()
                     dismiss()
                 }
                 .buttonStyle(SecondaryButtonStyle())
-
-                Text("ひとりでも、約束を残しておくことはできます。パートナーはあとから参加できます。")
-                    .font(.bodyRounded(14))
-                    .foregroundStyle(AppTheme.inkMuted)
-                    .padding(.top, 8)
             }
             .padding(24)
             .readableWidth()

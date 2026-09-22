@@ -10,6 +10,7 @@
 		2AFC026F37096F1D32A9432E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D50A9F5AA39461282850C68B /* Assets.xcassets */; };
 		E8C41B20A7D64C3F9E12F055 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = B22F9C03D5E1582A0F416C29 /* Supabase */; };
 		405FC315FBBC52B7534FF095 /* WeeklyReviewFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 021CD4C205063C8D4A49662B /* WeeklyReviewFlowView.swift */; };
+		A7E31C84B0D24F1A9E6C4B12 /* ReviewTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8F02D15C1E35A2B8D7E4C23 /* ReviewTabView.swift */; };
 		4144289BFD42FB4572953B64 /* Domain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A072A4002C9C684FE16549D /* Domain.swift */; };
 		5727F7ED9A6E949DA27B9D85 /* FutarigotoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 918FBDDFC60AB4D278F7C6F1 /* FutarigotoApp.swift */; };
 		57D97B4977A0EB5566BB9D66 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C565FE556198F49328E71639 /* RootView.swift */; };
@@ -29,6 +30,7 @@
 
 /* Begin PBXFileReference section */
 		021CD4C205063C8D4A49662B /* WeeklyReviewFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeeklyReviewFlowView.swift; sourceTree = "<group>"; };
+		B8F02D15C1E35A2B8D7E4C23 /* ReviewTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewTabView.swift; sourceTree = "<group>"; };
 		098E1912FB1E3C26CF468D66 /* AppSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSession.swift; sourceTree = "<group>"; };
 		8B17E6A4C9D04E21B3F50817 /* SupabaseConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseConfig.swift; sourceTree = "<group>"; };
 		1F8A3C29E4B6471D9C05A832 /* ObservationPhoto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObservationPhoto.swift; sourceTree = "<group>"; };
@@ -121,6 +123,7 @@
 			isa = PBXGroup;
 			children = (
 				021CD4C205063C8D4A49662B /* WeeklyReviewFlowView.swift */,
+				B8F02D15C1E35A2B8D7E4C23 /* ReviewTabView.swift */,
 			);
 			path = WeeklyReview;
 			sourceTree = "<group>";
@@ -263,6 +266,7 @@
 				68485FB983BA34037A12527D /* ObservationViews.swift in Sources */,
 				57D97B4977A0EB5566BB9D66 /* RootView.swift in Sources */,
 				405FC315FBBC52B7534FF095 /* WeeklyReviewFlowView.swift in Sources */,
+				A7E31C84B0D24F1A9E6C4B12 /* ReviewTabView.swift in Sources */,
 				EE9EAA76874C3AB69981D1BD /* WelcomeView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

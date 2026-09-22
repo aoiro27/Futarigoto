@@ -12,9 +12,13 @@ struct WeeklyReviewFlowView: View {
 
     @State private var drafts: [ReviewAnswer] = []
     @State private var index = 0
-    @State private var phase: Phase = .selfReview
+    @State private var phase: Phase = .loading
+    @State private var isSaving = false
+    @State private var saveError: String?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     enum Phase {
+        case loading
         case selfReview
         case waiting
         case recap
@@ -58,9 +62,15 @@ struct WeeklyReviewFlowView: View {
             .sorted { $0.createdAt < $1.createdAt }
     }
 
-    private var current: ReviewQuestion? {
-        guard index < questions.count else { return nil }
-        return questions[index]
+    private var pages: [ReviewPage] { ReviewPage.group(questions) }
+
+    private var current: ReviewPage? {
+        guard pages.indices.contains(index) else { return nil }
+        return pages[index]
+    }
+
+    private func isComplete(_ page: ReviewPage) -> Bool {
+        page.isComplete(in: drafts)
     }
 
     var body: some View {
@@ -68,22 +78,33 @@ struct WeeklyReviewFlowView: View {
         NavigationStack {
             Group {
                 switch phase {
+                case .loading:
+                    loadingContent
                 case .selfReview:
                     selfReviewContent
                 case .waiting:
                     waitingContent
                 case .recap:
                     recapContent
-                        .onAppear {
-                            session.revealReviewNotesIfNeeded(reviewDate: reviewDate)
+                        .task {
+                            await session.syncSharedReviewNotes(reviewDate: reviewDate)
                         }
                 }
             }
             .screenBackground()
+            .alert("保存できませんでした", isPresented: Binding(
+                get: { saveError != nil },
+                set: { if !$0 { saveError = nil } }
+            )) {
+                Button("OK", role: .cancel) { saveError = nil }
+            } message: {
+                Text(saveError ?? "もう一度お試しください。")
+            }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("とじる") { dismiss() }
+                        .disabled(isSaving)
                 }
             }
             .task {
@@ -102,108 +123,132 @@ struct WeeklyReviewFlowView: View {
         }
     }
 
+    private var loadingContent: some View {
+        ProgressView()
+            .controlSize(.large)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .accessibilityLabel("読み込み中")
+    }
+
     @ViewBuilder
     private var selfReviewContent: some View {
         if questions.isEmpty {
             VStack(spacing: 20) {
-                ScreenHeader(
-                    title: "ふりかえり",
-                    subtitle: "いま残っている約束がないので、ふりかえりの質問はありません。"
-                )
-                Button("次へ") { finishSelfReview() }
+                ScreenHeader(title: "ふりかえり")
+                EmptyNote(text: "約束がありません")
+                Button("とじる") { finishSelfReview() }
                     .buttonStyle(PrimaryButtonStyle())
             }
             .padding(24)
         } else if let current {
-            let answer = binding(for: current)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    Text("\(index + 1) / \(questions.count)")
-                        .font(.bodyRounded(13, weight: .semibold))
-                        .foregroundStyle(AppTheme.terracotta)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        reviewProgress
+                            .id("reviewTop")
 
-                    Text(current.eyebrow)
-                        .font(.bodyRounded(13, weight: .semibold))
-                        .foregroundStyle(AppTheme.terracotta)
+                        VStack(alignment: .leading, spacing: 10) {
+                            Label("この約束、今日はどうだった？", systemImage: "heart.fill")
+                                .font(.bodyRounded(13, weight: .medium))
+                                .foregroundStyle(AppTheme.terracotta)
+                            Text(current.title)
+                                .font(.titleRounded(23))
+                                .foregroundStyle(AppTheme.ink)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(.vertical, 6)
 
-                    Text(current.title)
-                        .font(.titleRounded(26))
-                        .foregroundStyle(AppTheme.ink)
-
-                    Text(current.ask)
-                        .font(.bodyRounded(17))
-                        .foregroundStyle(AppTheme.inkMuted)
-
-                    questionNotesSection(for: current)
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        ForEach(SelfReflection.allCases) { option in
-                            ChoiceCard(selected: answer.wrappedValue.applicable == true && answer.wrappedValue.reflection == option) {
-                                answer.wrappedValue.applicable = true
-                                answer.wrappedValue.reflection = option
-                                goNext()
-                            } content: {
-                                Text(option.label)
-                                    .font(.bodyRounded(16))
-                                    .foregroundStyle(AppTheme.ink)
-                            }
+                        ForEach(current.questions) { question in
+                            ReflectionMoodPicker(
+                                name: question.focus == .selfEval ? "自分" : session.partner?.displayName ?? "相手",
+                                isSelf: question.focus == .selfEval,
+                                answer: binding(for: question)
+                            )
                         }
                     }
-
-                    Button(AppCopy.notThisWeek) {
-                        answer.wrappedValue.applicable = false
-                        answer.wrappedValue.reflection = nil
-                        goNext()
-                    }
-                    .buttonStyle(QuietButtonStyle())
-                    .frame(maxWidth: .infinity)
-
-                    if index > 0 {
-                        Button("ひとつ前へ") { index -= 1 }
-                            .buttonStyle(QuietButtonStyle())
-                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .readableWidth()
                 }
-                .padding(24)
-                .readableWidth()
+                .onChange(of: index) { _, _ in
+                    proxy.scrollTo("reviewTop", anchor: .top)
+                }
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    reviewNavigation(current)
+                }
             }
         } else {
             ProgressView()
-                .onAppear { finishSelfReview() }
+                .onAppear { prepare() }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
-    private var waitingContent: some View {
-        VStack(spacing: 24) {
-            Spacer()
-            ScreenHeader(
-                title: "相手のふりかえりを待ちましょう",
-                subtitle: "自分の入力は残りました。相手も終わると、ふたりの答えと日々の想いを一緒に見られます。今日はもう一度入力できません。"
-            )
-            Spacer()
-            Button("ホームにもどる") { dismiss() }
-                .buttonStyle(SecondaryButtonStyle())
+    private var reviewProgress: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("ふたりのふりかえり")
+                    .font(.bodyRounded(14, weight: .medium))
+                Spacer()
+                Text("約束 \(index + 1) / \(pages.count)")
+                    .font(.bodyRounded(12, weight: .medium))
+            }
+            .foregroundStyle(AppTheme.inkMuted)
+            ProgressView(value: Double(index + 1), total: Double(pages.count))
+                .tint(AppTheme.terracotta)
+                .accessibilityLabel("約束 \(index + 1) / \(pages.count)")
         }
-        .padding(28)
+    }
+
+    private func reviewNavigation(_ page: ReviewPage) -> some View {
+        HStack(spacing: 16) {
+            if index > 0 {
+                Button {
+                    index -= 1
+                } label: {
+                    Label("戻る", systemImage: "chevron.left")
+                        .frame(minHeight: 48)
+                }
+                .buttonStyle(QuietButtonStyle())
+                .disabled(isSaving)
+            }
+            Button {
+                goNext()
+            } label: {
+                HStack(spacing: 8) {
+                    if isSaving { ProgressView().tint(.white) }
+                    Text(index + 1 == pages.count ? "ふりかえりを残す" : "次の約束へ")
+                    Image(systemName: index + 1 == pages.count ? "heart.fill" : "arrow.right")
+                }
+            }
+            .buttonStyle(PrimaryButtonStyle(enabled: isComplete(page) && !isSaving))
+            .disabled(!isComplete(page) || isSaving)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
         .readableWidth()
+        .background(AppTheme.cream)
+    }
+
+    private var waitingContent: some View {
+        ReviewWaitingView(partnerName: session.partner?.displayName ?? "パートナー") {
+            dismiss()
+        }
     }
 
     private var recapContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                ScreenHeader(
-                    eyebrow: AppWeek.dayLabel(for: reviewDate),
-                    title: session.partner == nil ? "ふりかえり" : "ふたりのふりかえり",
-                    subtitle: session.partner == nil
-                        ? "自分が残したことと、そのとき見えた想いです。"
-                        : "ふたりとも、同じ評価と日々の記録が見えます。"
+                ReviewRecapHeader(
+                    date: AppWeek.dayLabel(for: reviewDate),
+                    isTogether: session.partner != nil && session.bothCompletedReview(reviewDate: reviewDate)
                 )
 
                 if householdAgreements.isEmpty {
-                    EmptyNote(text: "見られる約束はまだありません。")
+                    EmptyNote(text: "約束がありません")
                 } else {
-                    ForEach(householdAgreements) { agreement in
-                        recapCard(for: agreement)
+                    ForEach(Array(householdAgreements.enumerated()), id: \.element.id) { index, agreement in
+                        recapCard(for: agreement, index: index)
                     }
                 }
 
@@ -218,35 +263,37 @@ struct WeeklyReviewFlowView: View {
         }
     }
 
-    private func recapCard(for agreement: Agreement) -> some View {
+    private func recapCard(for agreement: Agreement, index: Int) -> some View {
         let people = recapPeople(for: agreement)
         let notes = reviewNotes(for: agreement.id)
 
         return VStack(alignment: .leading, spacing: 16) {
-            Text(agreement.title)
-                .font(.titleRounded(22))
-                .foregroundStyle(AppTheme.ink)
+            VStack(alignment: .leading, spacing: 12) {
+                Label("約束 \(String(format: "%02d", index + 1))", systemImage: "heart.fill")
+                    .font(.bodyRounded(12, weight: .medium))
+                    .foregroundStyle(AppTheme.terracotta)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(AppTheme.terracottaSoft.opacity(0.6), in: Capsule())
+                Text(agreement.title)
+                    .font(.titleRounded(21))
+                    .foregroundStyle(AppTheme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             if !people.isEmpty {
                 VStack(alignment: .leading, spacing: 14) {
-                    Text("ふりかえり")
-                        .font(.bodyRounded(13, weight: .semibold))
-                        .foregroundStyle(AppTheme.terracotta)
                     ForEach(people, id: \.userId) { person in
-                        recapPersonBlock(person)
+                        RecapPersonCard(person: person)
                     }
                 }
             }
 
-            if notes.isEmpty {
-                Text("この日に残した記録はありませんでした。")
-                    .font(.bodyRounded(14))
-                    .foregroundStyle(AppTheme.inkMuted)
-            } else {
+            if !notes.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("日々の記録")
-                        .font(.bodyRounded(13, weight: .semibold))
-                        .foregroundStyle(AppTheme.terracotta)
+                    Label("この日に残した、ひとこと", systemImage: "book.closed.fill")
+                        .font(.bodyRounded(13, weight: .medium))
+                        .foregroundStyle(AppTheme.plum)
                     ForEach(notes) { item in
                         reviewNoteRow(item, showsAuthor: true)
                     }
@@ -255,41 +302,6 @@ struct WeeklyReviewFlowView: View {
         }
         .padding(20)
         .appCard()
-    }
-
-    private func recapPersonBlock(_ person: RecapPerson) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(person.name)
-                .font(.bodyRounded(16, weight: .medium))
-                .foregroundStyle(AppTheme.ink)
-
-            recapLine(label: AppCopy.selfEvalLabel, value: person.selfLabel)
-
-            if let otherName = person.otherName, let otherLabel = person.otherLabel {
-                recapLine(
-                    label: "\(otherName)から",
-                    value: otherLabel,
-                    emphasis: person.gap
-                )
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(person.gap.background)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-
-    private func recapLine(label: String, value: String, emphasis: ReflectionGap? = nil) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Text(label)
-                .font(.bodyRounded(14))
-                .foregroundStyle(emphasis?.color ?? AppTheme.inkMuted)
-                .frame(width: 88, alignment: .leading)
-            Text(value)
-                .font(.bodyRounded(15, weight: emphasis == nil ? .regular : .semibold))
-                .foregroundStyle(emphasis?.color ?? AppTheme.ink)
-            Spacer(minLength: 0)
-        }
     }
 
     private func prepare() {
@@ -316,13 +328,15 @@ struct WeeklyReviewFlowView: View {
                 )
             }
         }
-        index = drafts.firstIndex(where: { !$0.isComplete }) ?? 0
+        index = pages.firstIndex(where: { !isComplete($0) }) ?? 0
         phase = .selfReview
     }
 
     private func considerAdvanceFromWaiting() {
-        if phase == .waiting, session.bothCompletedReview(reviewDate: reviewDate) {
-            session.revealReviewNotesIfNeeded(reviewDate: reviewDate)
+        guard phase == .waiting, session.bothCompletedReview(reviewDate: reviewDate) else { return }
+        phase = .loading
+        Task {
+            await session.syncSharedReviewNotes(reviewDate: reviewDate)
             phase = .recap
         }
     }
@@ -344,29 +358,38 @@ struct WeeklyReviewFlowView: View {
     }
 
     private func goNext() {
-        persistCurrentIfPossible()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-            if index + 1 < questions.count {
+        guard !isSaving, let current, isComplete(current) else { return }
+        if index + 1 == pages.count {
+            finishSelfReview()
+            return
+        }
+        do {
+            let ids = Set(current.questions.map(\.id))
+            let payload = drafts.filter { ids.contains($0.id) }.compactMap(reflectionDraft(from:))
+            try session.saveReflections(payload, reviewDate: reviewDate)
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
                 index += 1
-            } else {
-                finishSelfReview()
             }
+        } catch {
+            saveError = "入力はこの画面に残っています。もう一度お試しください。"
         }
     }
 
-    private func persistCurrentIfPossible() {
-        guard index < drafts.count else { return }
-        guard let payload = reflectionDraft(from: drafts[index]) else { return }
-        try? session.saveReflections([payload], reviewDate: reviewDate)
-    }
-
     private func finishSelfReview() {
-        persistCurrentIfPossible()
-        let payload = drafts.compactMap(reflectionDraft(from:))
-        try? session.saveReflections(payload, reviewDate: reviewDate)
+        guard !isSaving, pages.allSatisfy({ isComplete($0) }) else { return }
+        isSaving = true
+        do {
+            let payload = drafts.compactMap(reflectionDraft(from:))
+            try session.saveReflections(payload, reviewDate: reviewDate)
+        } catch {
+            isSaving = false
+            saveError = "入力はこの画面に残っています。もう一度お試しください。"
+            return
+        }
         Task {
             await session.refreshFromCloud()
-            session.revealReviewNotesIfNeeded(reviewDate: reviewDate)
+            await session.syncSharedReviewNotes(reviewDate: reviewDate)
+            isSaving = false
             advanceAfterSelfReview()
         }
     }
@@ -396,27 +419,6 @@ struct WeeklyReviewFlowView: View {
             phase = .waiting
         } else {
             phase = .recap
-        }
-    }
-
-    @ViewBuilder
-    private func questionNotesSection(for question: ReviewQuestion) -> some View {
-        if question.focus == .selfEval {
-            let notes = questionNotes(for: question)
-            VStack(alignment: .leading, spacing: 10) {
-                Text("自分が残したこと")
-                    .font(.bodyRounded(13, weight: .semibold))
-                    .foregroundStyle(AppTheme.terracotta)
-                if notes.isEmpty {
-                    Text("この日、この約束について残した記録はまだありません。")
-                        .font(.bodyRounded(14))
-                        .foregroundStyle(AppTheme.inkMuted)
-                } else {
-                    ForEach(notes) { item in
-                        reviewNoteRow(item, showsAuthor: false)
-                    }
-                }
-            }
         }
     }
 
@@ -469,6 +471,8 @@ struct WeeklyReviewFlowView: View {
                 userId: member.id,
                 name: member.displayName,
                 selfLabel: selfReflectionLabel(userId: member.id, agreementId: agreement.id),
+                selfValue: selfValue,
+                otherValue: otherValue,
                 otherName: other?.displayName,
                 otherLabel: other.map { otherViewLabel(reviewerId: $0.id, agreementId: agreement.id) },
                 gap: ReflectionGap(selfValue: selfValue, otherValue: otherValue)
@@ -531,31 +535,6 @@ struct WeeklyReviewFlowView: View {
         return false
     }
 
-    private func questionNotes(for question: ReviewQuestion) -> [DailyObservation] {
-        switch question.focus {
-        case .selfEval:
-            return observations
-                .filter {
-                    $0.agreementId == question.agreementId &&
-                    !$0.isDeleted &&
-                    $0.authorId == session.currentUserID &&
-                    belongsToReview($0)
-                }
-                .sorted(by: reviewNoteOrder)
-        case .partnerEval:
-            let canSeePartner = session.partner == nil || session.bothCompletedReview(reviewDate: reviewDate)
-            guard canSeePartner, let partnerId = session.partner?.id else { return [] }
-            return observations
-                .filter {
-                    $0.agreementId == question.agreementId &&
-                    !$0.isDeleted &&
-                    $0.authorId == partnerId &&
-                    belongsToReview($0)
-                }
-                .sorted(by: reviewNoteOrder)
-        }
-    }
-
     private func reviewNotes(for agreementId: UUID) -> [DailyObservation] {
         let revealShared = session.partner == nil || session.bothCompletedReview(reviewDate: reviewDate)
         return observations
@@ -590,70 +569,6 @@ struct WeeklyReviewFlowView: View {
     }
 }
 
-struct ReviewHistoryView: View {
-    @Environment(AppSession.self) private var session
-    @Query private var reflections: [WeeklyReflection]
-    @State private var presented: PresentedReview?
-
-    var body: some View {
-        let _ = (session.syncRevision, reflections.count)
-        let days = session.pastReviewDates()
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                ScreenHeader(
-                    title: "これまでのふりかえり",
-                    subtitle: "過去の入力と、そのとき見えた想いをいつでも開けます。"
-                )
-
-                if days.isEmpty {
-                    EmptyNote(text: "まだふりかえりはありません。")
-                } else {
-                    VStack(spacing: 10) {
-                        ForEach(days, id: \.self) { day in
-                            Button {
-                                presented = PresentedReview(date: day, readOnly: true)
-                            } label: {
-                                HStack {
-                                    Text(AppWeek.dayLabel(for: day))
-                                        .font(.bodyRounded(16, weight: .medium))
-                                        .foregroundStyle(AppTheme.ink)
-                                    Spacer()
-                                    Text(historyStatus(for: day))
-                                        .font(.bodyRounded(13))
-                                        .foregroundStyle(AppTheme.inkMuted)
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption)
-                                        .foregroundStyle(AppTheme.inkMuted)
-                                }
-                                .padding(18)
-                                .appCard()
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-            }
-            .padding(20)
-            .readableWidth()
-        }
-        .screenBackground()
-        .navigationBarTitleDisplayMode(.inline)
-        .fullScreenCover(item: $presented) { item in
-            WeeklyReviewFlowView(reviewDate: item.date, readOnly: item.readOnly)
-        }
-    }
-
-    private func historyStatus(for day: Date) -> String {
-        if session.partner == nil || session.bothCompletedReview(reviewDate: day) {
-            return "見る"
-        }
-        if session.hasCompletedOwnReview(reviewDate: day) {
-            return "自分のみ"
-        }
-        return "見る"
-    }
-}
-
 enum ReviewFocus: Hashable {
     case selfEval
     case partnerEval
@@ -667,6 +582,33 @@ struct ReviewQuestion: Identifiable, Hashable {
     var ask: String
 
     var id: String { "\(agreementId.uuidString)-\(focus)" }
+}
+
+struct ReviewPage: Identifiable {
+    let agreementId: UUID
+    let title: String
+    let questions: [ReviewQuestion]
+
+    var id: UUID { agreementId }
+
+    static func group(_ questions: [ReviewQuestion]) -> [ReviewPage] {
+        var order: [UUID] = []
+        var grouped: [UUID: [ReviewQuestion]] = [:]
+        for question in questions {
+            if grouped[question.agreementId] == nil { order.append(question.agreementId) }
+            grouped[question.agreementId, default: []].append(question)
+        }
+        return order.compactMap { id in
+            guard let items = grouped[id], let first = items.first else { return nil }
+            return ReviewPage(agreementId: id, title: first.title, questions: items)
+        }
+    }
+
+    func isComplete(in answers: [ReviewAnswer]) -> Bool {
+        questions.allSatisfy { question in
+            answers.first(where: { $0.id == question.id })?.isComplete == true
+        }
+    }
 }
 
 struct ReviewAnswer: Identifiable {
@@ -717,19 +659,395 @@ private struct RecapPerson {
     var userId: UUID
     var name: String
     var selfLabel: String
+    var selfValue: SelfReflection?
+    var otherValue: SelfReflection?
     var otherName: String?
     var otherLabel: String?
     var gap: ReflectionGap?
-}
-
-private extension Optional where Wrapped == ReflectionGap {
-    var background: Color {
-        self?.background ?? AppTheme.creamDeep.opacity(0.55)
-    }
 }
 
 struct PresentedReview: Identifiable {
     let date: Date
     var readOnly: Bool
     var id: TimeInterval { date.timeIntervalSince1970 }
+}
+
+private struct ReflectionMoodPicker: View {
+    let name: String
+    let isSelf: Bool
+    @Binding var answer: ReviewAnswer
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var accent: Color { isSelf ? AppTheme.terracotta : AppTheme.plum }
+    private var soft: Color { isSelf ? AppTheme.terracottaSoft : AppTheme.lavender }
+    private var selectionLabel: String {
+        if answer.applicable == false { return "今回は、その機会がなかった" }
+        return answer.reflection?.label ?? "近い表情を、ひとつ選んでね"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(name)
+                    .font(.bodyRounded(17, weight: .semibold))
+                    .foregroundStyle(AppTheme.ink)
+                Text(isSelf ? "のこと" : "を見ていて")
+                    .font(.bodyRounded(12))
+                    .foregroundStyle(AppTheme.inkMuted)
+                Spacer(minLength: 0)
+                if answer.isComplete {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(accent)
+                        .accessibilityLabel("選択済み")
+                }
+            }
+
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: typeSize.isAccessibilitySize ? 2 : 4), spacing: 10) {
+                ForEach(SelfReflection.allCases) { option in
+                    moodButton(option)
+                }
+            }
+
+            Text(selectionLabel)
+                .font(.bodyRounded(13, weight: .medium))
+                .foregroundStyle(answer.isComplete ? accent : AppTheme.inkMuted)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.center)
+
+            Button {
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.16)) {
+                    answer.applicable = false
+                    answer.reflection = nil
+                }
+            } label: {
+                Label("今回はなかった", systemImage: answer.applicable == false ? "checkmark.circle.fill" : "minus.circle")
+                    .font(.bodyRounded(12, weight: .medium))
+                    .foregroundStyle(answer.applicable == false ? accent : AppTheme.inkMuted)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .background(answer.applicable == false ? soft : AppTheme.cream, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(name)：今回はなかった")
+            .accessibilityAddTraits(answer.applicable == false ? .isSelected : [])
+        }
+        .padding(16)
+        .appCard()
+        .overlay(alignment: .top) {
+            Capsule().fill(soft).frame(width: 44, height: 4)
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private func moodButton(_ option: SelfReflection) -> some View {
+        let selected = answer.applicable == true && answer.reflection == option
+        return Button {
+            withAnimation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.65)) {
+                answer.applicable = true
+                answer.reflection = option
+            }
+        } label: {
+            VStack(spacing: 6) {
+                ReflectionFace(reflection: option)
+                    .frame(width: 48, height: 48)
+                    .rotationEffect(.degrees(selected ? -7 : 0))
+                    .scaleEffect(selected ? 1.06 : 1)
+                Text(option.moodCaption)
+                    .font(.bodyRounded(11, weight: selected ? .semibold : .regular))
+                    .foregroundStyle(AppTheme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 9)
+            .background(selected ? soft : .clear, in: RoundedRectangle(cornerRadius: 18))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18)
+                    .strokeBorder(selected ? accent : .clear, lineWidth: 1.5)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 18))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(name)：\(option.label)")
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+private extension SelfReflection {
+    var moodCaption: String {
+        switch self {
+        case .veryGood: "まもれた"
+        case .mostlyGood: "だいたい"
+        case .sometimesMissed: "ときどき"
+        case .oftenMissed: "むずかしい"
+        }
+    }
+
+    var moodColor: Color {
+        switch self {
+        case .veryGood: AppTheme.ochreSoft
+        case .mostlyGood: AppTheme.sageSoft
+        case .sometimesMissed: AppTheme.skySoft
+        case .oftenMissed: AppTheme.lavender
+        }
+    }
+}
+
+/// Gentle expressions, without scores or a punitive red "bad" state.
+private struct ReflectionFace: View {
+    let reflection: SelfReflection
+
+    var body: some View {
+        Canvas { context, size in
+            context.scaleBy(x: size.width / 48, y: size.height / 48)
+            context.fill(Path(roundedRect: CGRect(x: 2, y: 2, width: 44, height: 44), cornerRadius: 18), with: .color(reflection.moodColor))
+            func stroke(_ path: Path) {
+                context.stroke(path, with: .color(AppTheme.ink), style: StrokeStyle(lineWidth: 1.8, lineCap: .round))
+            }
+            for x: CGFloat in [16, 32] {
+                if reflection == .veryGood {
+                    var eye = Path()
+                    eye.move(to: CGPoint(x: x - 3, y: 21))
+                    eye.addQuadCurve(to: CGPoint(x: x + 3, y: 21), control: CGPoint(x: x, y: 15))
+                    stroke(eye)
+                } else {
+                    context.fill(Path(ellipseIn: CGRect(x: x - 1.5, y: 18, width: 3, height: 4)), with: .color(AppTheme.ink))
+                }
+            }
+            for x: CGFloat in [9, 33] {
+                context.fill(Path(ellipseIn: CGRect(x: x, y: 26, width: 7, height: 4)), with: .color(AppTheme.peach.opacity(0.65)))
+            }
+            var mouth = Path()
+            switch reflection {
+            case .veryGood:
+                mouth.move(to: CGPoint(x: 18, y: 28))
+                mouth.addQuadCurve(to: CGPoint(x: 30, y: 28), control: CGPoint(x: 24, y: 41))
+                mouth.closeSubpath()
+                context.fill(mouth, with: .color(AppTheme.ink))
+            case .mostlyGood:
+                mouth.move(to: CGPoint(x: 19, y: 29))
+                mouth.addQuadCurve(to: CGPoint(x: 29, y: 29), control: CGPoint(x: 24, y: 35))
+                stroke(mouth)
+            case .sometimesMissed:
+                mouth.move(to: CGPoint(x: 20, y: 31))
+                mouth.addLine(to: CGPoint(x: 28, y: 30))
+                stroke(mouth)
+            case .oftenMissed:
+                mouth.move(to: CGPoint(x: 20, y: 32))
+                mouth.addQuadCurve(to: CGPoint(x: 28, y: 32), control: CGPoint(x: 24, y: 28))
+                stroke(mouth)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+
+private struct ReviewWaitingView: View {
+    let partnerName: String
+    let onClose: () -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 24) {
+                VStack(spacing: 16) {
+                    Text("ひと足先に、おつかれさま")
+                        .font(.bodyRounded(14, weight: .medium))
+                        .foregroundStyle(AppTheme.plum)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 9)
+                        .background(AppTheme.lavender, in: Capsule())
+
+                    TogetherIllustration(scene: .promises)
+                        .frame(height: 180)
+                        .background {
+                            Circle()
+                                .fill(AppTheme.lavender.opacity(0.45))
+                                .frame(width: 170, height: 170)
+                        }
+
+                    Text("あなたのふりかえりを\n残しました")
+                        .font(.titleRounded(26))
+                        .foregroundStyle(AppTheme.ink)
+                        .lineSpacing(6)
+
+                    Text("ふたりの答えがそろったら、\nお互いの気持ちを、ゆっくり見てみよう。")
+                        .font(.bodyRounded(15))
+                        .foregroundStyle(AppTheme.inkMuted)
+                        .lineSpacing(6)
+                }
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
+                VStack(spacing: 0) {
+                    statusRow(name: "自分", status: "入力できました", symbol: "checkmark", color: AppTheme.terracotta, background: AppTheme.terracottaSoft)
+                    Rectangle()
+                        .fill(AppTheme.line.opacity(0.4))
+                        .frame(height: 1)
+                        .padding(.vertical, 16)
+                    statusRow(name: partnerName, status: "入力を待っています", symbol: "ellipsis", color: AppTheme.plum, background: AppTheme.lavender)
+                }
+                .padding(20)
+                .appCard()
+
+                Label {
+                    Text("この画面を閉じても大丈夫。\n「ふりかえり」から、また見にこられます。")
+                        .lineSpacing(5)
+                } icon: {
+                    Image(systemName: "heart")
+                        .foregroundStyle(AppTheme.terracotta)
+                }
+                .font(.bodyRounded(13))
+                .foregroundStyle(AppTheme.inkMuted)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 16)
+            .padding(.bottom, 24)
+            .readableWidth()
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Button("またあとで見る", action: onClose)
+                .buttonStyle(PrimaryButtonStyle())
+                .padding(.horizontal, 24)
+                .padding(.vertical, 12)
+                .readableWidth()
+                .background(AppTheme.cream)
+        }
+    }
+
+    private func statusRow(name: String, status: String, symbol: String, color: Color, background: Color) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: symbol)
+                .font(.system(size: 18, weight: .semibold, design: .rounded))
+                .foregroundStyle(color)
+                .frame(width: 44, height: 44)
+                .background(background, in: RoundedRectangle(cornerRadius: 16))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(name)
+                    .font(.bodyRounded(15, weight: .medium))
+                    .foregroundStyle(AppTheme.ink)
+                Text(status)
+                    .font(.bodyRounded(13))
+                    .foregroundStyle(color)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+
+private struct ReviewRecapHeader: View {
+    let date: String
+    let isTogether: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(date)
+                .font(.bodyRounded(13, weight: .medium))
+                .foregroundStyle(AppTheme.plum)
+            HStack(alignment: .center, spacing: 8) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(isTogether ? "ふたりの気持ちが\nそろいました" : "気持ちを残した\nふりかえりノート")
+                        .font(.titleRounded(25))
+                        .foregroundStyle(AppTheme.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(isTogether ? "同じところも、ちがうところも。" : "その日の気持ちを、ゆっくり。")
+                        .font(.bodyRounded(13))
+                        .foregroundStyle(AppTheme.inkMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                TogetherIllustration(scene: .journal)
+                    .frame(width: 96, height: 82)
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.lavender.opacity(0.65), in: RoundedRectangle(cornerRadius: 28))
+    }
+}
+
+private struct RecapPersonCard: View {
+    let person: RecapPerson
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("\(person.name)のこと")
+                .font(.bodyRounded(16, weight: .semibold))
+                .foregroundStyle(AppTheme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if typeSize.isAccessibilitySize {
+                VStack(spacing: 10) { answers }
+            } else {
+                HStack(alignment: .top, spacing: 10) { answers }
+            }
+
+            if person.selfValue != nil && person.otherValue != nil {
+                Label {
+                    Text(person.gap == nil ? "同じふりかえりでした" : "見え方に、ちょっと違いがありました")
+                        .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: person.gap == nil ? "heart" : "bubble.left.and.bubble.right")
+                }
+                .font(.bodyRounded(12))
+                .foregroundStyle(AppTheme.plum)
+                .padding(.horizontal, 2)
+            }
+        }
+        .padding(.vertical, 8)
+    }
+
+    @ViewBuilder
+    private var answers: some View {
+        RecapMoodTile(author: "本人の気持ち", value: person.selfValue, label: person.selfLabel, color: AppTheme.terracottaSoft, accent: AppTheme.terracotta)
+        if let name = person.otherName, let label = person.otherLabel {
+            RecapMoodTile(author: "\(name)から見て", value: person.otherValue, label: label, color: AppTheme.lavender, accent: AppTheme.plum)
+        }
+    }
+}
+
+private struct RecapMoodTile: View {
+    let author: String
+    let value: SelfReflection?
+    let label: String
+    let color: Color
+    let accent: Color
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Text(author)
+                .font(.bodyRounded(12, weight: .medium))
+                .foregroundStyle(accent)
+                .fixedSize(horizontal: false, vertical: true)
+            Group {
+                if let value {
+                    ReflectionFace(reflection: value)
+                } else {
+                    Image(systemName: label == AppCopy.notThisWeek ? "moon.zzz.fill" : "ellipsis.bubble.fill")
+                        .font(.system(size: 28, weight: .regular, design: .rounded))
+                        .foregroundStyle(accent.opacity(0.7))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(AppTheme.paper.opacity(0.7), in: RoundedRectangle(cornerRadius: 22))
+                }
+            }
+            .frame(width: 60, height: 60)
+            .accessibilityHidden(true)
+            Text(label)
+                .font(.bodyRounded(13, weight: .medium))
+                .foregroundStyle(AppTheme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 16)
+        .background(color.opacity(0.5), in: RoundedRectangle(cornerRadius: 22))
+        .accessibilityElement(children: .combine)
+    }
 }

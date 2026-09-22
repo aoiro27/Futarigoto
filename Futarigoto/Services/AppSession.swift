@@ -14,9 +14,29 @@ final class AppSession {
 
     @ObservationIgnored
     private var modelContext: ModelContext?
+    @ObservationIgnored
+    private var didConfirmRemoteHousehold = false
+    @ObservationIgnored
+    private var refreshGeneration = 0
+    @ObservationIgnored
+    private var inFlightRefresh: Task<Void, Never>?
+    @ObservationIgnored
+    private var inFlightPublish: Task<Void, Error>?
+    @ObservationIgnored
+    private var mutationCount = 0
+    @ObservationIgnored
+    private var publishedMutationCount = 0
+    @ObservationIgnored
+    private var lastPullAt: Date?
+    @ObservationIgnored
+    private var refreshWantsFailureMark = false
+    @ObservationIgnored
+    private var publishGeneration = 0
 
     private let userDefaultsKey = "currentUserID"
     private let partnerRevealPrefix = "partnerRevealSeen."
+    private let remoteHouseholdKey = "didConfirmRemoteHousehold"
+    private let cloudDirtyKey = "cloudNeedsPublish"
 
     func attach(modelContext: ModelContext) {
         self.modelContext = modelContext
@@ -24,6 +44,10 @@ final class AppSession {
            let id = UUID(uuidString: raw),
            user(id: id) != nil {
             currentUserID = id
+        }
+        didConfirmRemoteHousehold = UserDefaults.standard.bool(forKey: remoteHouseholdKey)
+        if UserDefaults.standard.bool(forKey: cloudDirtyKey) {
+            mutationCount = 1
         }
         didAttach = true
         Task { await refreshFromCloud() }
@@ -81,7 +105,7 @@ final class AppSession {
 
     var inviteShareText: String {
         guard let code = currentHousehold?.inviteCode else { return "" }
-        return "「ふたりごと」で一緒にはじめませんか？\n招待コード: \(code)\n\(inviteURL?.absoluteString ?? "")"
+        return "ふたりごと 招待コード: \(code)\n\(inviteURL?.absoluteString ?? "")"
     }
 
     // MARK: - Onboarding
@@ -114,7 +138,9 @@ final class AppSession {
         try context.save()
         setCurrentUser(user.id)
         showsPostCreateInvite = true
+        markRemoteHouseholdConfirmed()
         NotificationService.shared.requestAuthorization()
+        markCloudDirty()
         await publishToCloud(markFailure: true)
     }
 
@@ -141,6 +167,8 @@ final class AppSession {
                 throw AppError.invalidInvite
             }
             try installSnapshot(remote)
+            markRemoteHouseholdConfirmed()
+            lastPullAt = Date()
         } catch let error as AppError {
             throw error
         } catch {
@@ -154,6 +182,7 @@ final class AppSession {
         setCurrentUser(userId)
         pendingInviteCode = nil
         NotificationService.shared.requestAuthorization()
+        markCloudDirty()
         await publishToCloud(markFailure: true)
     }
 
@@ -433,16 +462,16 @@ final class AppSession {
 
         let hadUnpublished = allObservations().contains { !$0.isDeleted && !$0.isPublished }
         if bothCompletedReview(reviewDate: day) || partner == nil {
-            publishUnpublishedObservations()
             if householdMembers.count == 2, hadUnpublished {
                 NotificationService.shared.notifyBothReflectionsReady()
             }
         }
     }
 
-    func revealReviewNotesIfNeeded(reviewDate: Date) {
+    func syncSharedReviewNotes(reviewDate: Date) async {
         guard bothCompletedReview(reviewDate: reviewDate) || partner == nil else { return }
-        publishUnpublishedObservations()
+        await publishUnpublishedObservations()
+        try? await pullHousehold()
     }
 
     func markPartnerRevealSeen(reviewDate: Date) {
@@ -467,7 +496,7 @@ final class AppSession {
 
     // MARK: - Private
 
-    private func publishUnpublishedObservations() {
+    private func publishUnpublishedObservations() async {
         guard let context = modelContext, let householdId = currentHouseholdID else { return }
         let agreementIDs = Set(allAgreements().filter { $0.householdId == householdId }.map(\.id))
         let targets = allObservations().filter {
@@ -479,11 +508,10 @@ final class AppSession {
             item.publishedAt = .now
             item.updatedAt = .now
         }
-        try? context.save()
-        Task {
-            await publishToCloud(markFailure: false)
-            try? await HouseholdCloudStore.publishPendingObservations()
+        if !targets.isEmpty {
+            try? context.save()
         }
+        await publishToCloud(markFailure: false)
     }
 
     private func setCurrentUser(_ id: UUID) {
@@ -597,6 +625,17 @@ final class AppSession {
                 displayName: user.displayName
             )
         }
+        markRemoteHouseholdConfirmed()
+    }
+
+    private func markRemoteHouseholdConfirmed() {
+        didConfirmRemoteHousehold = true
+        UserDefaults.standard.set(true, forKey: remoteHouseholdKey)
+    }
+
+    private func markCloudDirty() {
+        mutationCount += 1
+        UserDefaults.standard.set(true, forKey: cloudDirtyKey)
     }
 
     private func purgeExpiredImages() {
@@ -691,49 +730,136 @@ final class AppSession {
         return householdMembers.first(where: { $0.id != userId })?.id
     }
 
-    func refreshFromCloud() async {
+    func refreshFromCloud(markFailure: Bool = false) async {
+        if markFailure {
+            refreshWantsFailureMark = true
+        }
+        if let inFlightRefresh {
+            await inFlightRefresh.value
+            return
+        }
+        let task = Task { @MainActor in
+            await self.performRefresh()
+        }
+        inFlightRefresh = task
+        await task.value
+        inFlightRefresh = nil
+    }
+
+    private func performRefresh() async {
         guard currentHousehold != nil else { return }
         guard SupabaseConfig.isConfigured else { return }
+        let markFailure = refreshWantsFailureMark
+        refreshWantsFailureMark = false
+        refreshGeneration += 1
+        let generation = refreshGeneration
         do {
             let authId = try await HouseholdCloudStore.ensureUser()
             try remapCurrentUser(to: authId)
-            do {
-                try await bootstrapRemoteIfNeeded()
-            } catch {
-                // Local household can still be used until the next successful sync.
+            var alreadyPulled = false
+            if !didConfirmRemoteHousehold {
+                try? await pullHousehold()
+                alreadyPulled = didConfirmRemoteHousehold
+            }
+            if !didConfirmRemoteHousehold {
+                do {
+                    try await bootstrapRemoteIfNeeded()
+                } catch {
+                    // Local household can still be used until the next successful sync.
+                }
             }
             purgeExpiredImages()
-            await publishToCloud(markFailure: false)
-            guard let remote = try await HouseholdCloudStore.fetchHousehold() else {
-                cloudPublishFailed = true
-                return
+            let needsPublish = mutationCount != publishedMutationCount
+            if needsPublish {
+                await publishToCloud(markFailure: false)
             }
-            try installSnapshot(remote)
-            purgeExpiredImages()
+            if generation != refreshGeneration { return }
+            if needsPublish || !alreadyPulled {
+                try await pullHousehold()
+            }
+            guard generation == refreshGeneration else { return }
             cloudPublishFailed = false
         } catch {
+            guard generation == refreshGeneration, markFailure else { return }
             cloudPublishFailed = true
         }
     }
 
+    private func pullHousehold() async throws {
+        guard let remote = try await HouseholdCloudStore.fetchHousehold() else { return }
+        markRemoteHouseholdConfirmed()
+        lastPullAt = Date()
+        try installSnapshot(remote)
+        purgeExpiredImages()
+        Task { await fillMissingImages(from: remote) }
+    }
+
+    private func fillMissingImages(from snapshot: HouseholdSnapshot) async {
+        let alreadyHave = Set(
+            allObservations().compactMap { item -> UUID? in
+                guard let data = item.imageData, !data.isEmpty, !item.isImageExpired else { return nil }
+                return item.id
+            }
+        )
+        let images = await HouseholdCloudStore.downloadMissingImages(from: snapshot, alreadyHave: alreadyHave)
+        guard !images.isEmpty, let context = modelContext else { return }
+        var changed = false
+        for item in allObservations() {
+            guard let data = images[item.id], !data.isEmpty else { continue }
+            if item.imageData != data {
+                item.imageData = data
+                changed = true
+            }
+        }
+        if changed {
+            try? context.save()
+            syncRevision += 1
+        }
+    }
+
     private func schedulePublishToCloud() {
+        markCloudDirty()
         Task { await publishToCloud(markFailure: false) }
     }
 
     private func publishToCloud(markFailure: Bool) async {
+        if let inFlightPublish {
+            _ = try? await inFlightPublish.value
+        }
         guard SupabaseConfig.isConfigured else {
             if markFailure { cloudPublishFailed = true }
             return
         }
+        let capturedMutation = mutationCount
+        if capturedMutation == publishedMutationCount {
+            if markFailure {
+                cloudPublishFailed = false
+            }
+            return
+        }
         guard let snapshot = makeSnapshot() else { return }
-        do {
-            _ = try await HouseholdCloudStore.ensureUser()
+        publishGeneration += 1
+        let generation = publishGeneration
+        let task = Task { @MainActor in
             try await HouseholdCloudStore.save(snapshot: snapshot)
-            cloudPublishFailed = false
+        }
+        inFlightPublish = task
+        do {
+            try await task.value
+            if mutationCount == capturedMutation {
+                publishedMutationCount = capturedMutation
+                UserDefaults.standard.set(false, forKey: cloudDirtyKey)
+            }
+            if markFailure {
+                cloudPublishFailed = false
+            }
         } catch {
             if markFailure {
                 cloudPublishFailed = true
             }
+        }
+        if publishGeneration == generation {
+            inFlightPublish = nil
         }
     }
 
@@ -987,7 +1113,7 @@ enum AppError: LocalizedError {
         case .householdFull:
             return "この家庭はすでにふたりで始まっています。"
         case .notConfigured:
-            return "まだサーバーの設定がありません。SupabaseConfig.swift に Project URL と anon key を入れてください。"
+            return "接続の準備ができていません。"
         case .cloudUnavailable:
             return "通信できませんでした。時間をおいてもう一度試してください。"
         }

@@ -2,27 +2,16 @@ import SwiftUI
 import SwiftData
 
 struct HomeView: View {
-    @Binding var tab: MainTab
     @Environment(AppSession.self) private var session
     @Query private var agreements: [Agreement]
-    @Query private var members: [HouseholdMember]
-    @Query private var reflections: [WeeklyReflection]
 
-    @State private var showsObservation = false
-    @State private var presentedReview: PresentedReview?
     @State private var showsInvite = false
     @State private var isRefreshing = false
 
-    private var householdAgreements: [Agreement] {
-        guard let householdId = session.currentHouseholdID else { return [] }
-        return agreements
-            .filter { $0.householdId == householdId && $0.deletedAt == nil }
-            .sorted { $0.createdAt < $1.createdAt }
-    }
-
-    private var today: Date {
-        let _ = (agreements.count, members.count, reflections.count)
-        return session.todayReviewDate()
+    private var myAgreements: [Agreement] {
+        let _ = agreements.count
+        guard let userId = session.currentUserID else { return [] }
+        return session.applicableAgreements(for: userId)
     }
 
     var body: some View {
@@ -31,42 +20,25 @@ struct HomeView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
                     header
-                    weekCard
                     agreementsSection
+                    if session.cloudPublishFailed {
+                        Text("同期に失敗しました。画面を下に引っ張って、もう一度試してください。")
+                            .font(.bodyRounded(14))
+                            .foregroundStyle(AppTheme.terracotta)
+                            .lineSpacing(3)
+                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 12)
-                .padding(.bottom, 120)
+                .padding(.bottom, 32)
                 .readableWidth()
             }
             .screenBackground()
             .refreshable {
                 await reloadFromCloud()
             }
-            .overlay(alignment: .bottom) {
-                Button {
-                    showsObservation = true
-                } label: {
-                    Label(AppCopy.addToday, systemImage: "square.and.pencil")
-                }
-                .buttonStyle(PrimaryButtonStyle())
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
-                .padding(.bottom, 8)
-                .background(
-                    AppTheme.cream.opacity(0.96)
-                        .ignoresSafeArea(edges: .bottom)
-                )
-                .readableWidth()
-            }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .navigationBar)
-            .sheet(isPresented: $showsObservation) {
-                ObservationFlowView()
-            }
-            .fullScreenCover(item: $presentedReview) { item in
-                WeeklyReviewFlowView(reviewDate: item.date, readOnly: item.readOnly)
-            }
             .sheet(isPresented: $showsInvite) {
                 NavigationStack {
                     InvitePartnerView()
@@ -82,38 +54,24 @@ struct HomeView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("ふたりの毎日に、よりそって")
-                        .font(.bodyRounded(13))
-                        .foregroundStyle(AppTheme.terracotta)
-                    Text(AppCopy.homeHeader)
-                        .font(.titleRounded(30))
-                        .foregroundStyle(AppTheme.ink)
-                }
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text("ふたりごと")
+                    .font(.titleRounded(30))
+                    .foregroundStyle(AppTheme.ink)
                 Spacer(minLength: 0)
-                WarmMotif(symbol: "house.fill")
-            }
-            .padding(.bottom, 12)
-
-            HStack(spacing: 12) {
-                if let user = session.currentUser {
-                    Text(user.displayName)
-                        .font(.bodyRounded(14, weight: .medium))
-                        .foregroundStyle(AppTheme.inkMuted)
-                }
-
-                Spacer()
-
                 if session.canInvitePartner {
-                    Button("パートナーを招待") {
+                    Button {
                         showsInvite = true
+                    } label: {
+                        Label("招待", systemImage: "person.badge.plus")
+                            .padding(.horizontal, 12)
+                            .frame(minHeight: 44)
+                            .background(AppTheme.paper, in: Capsule())
                     }
                     .font(.bodyRounded(14, weight: .medium))
                     .foregroundStyle(AppTheme.terracotta)
                 }
-
                 Button {
                     Task { await reloadFromCloud() }
                 } label: {
@@ -126,93 +84,34 @@ struct HomeView: View {
                 }
                 .font(.bodyRounded(16, weight: .medium))
                 .foregroundStyle(AppTheme.terracotta)
-                .frame(width: 28, height: 28)
+                .frame(width: 44, height: 44)
+                .background(AppTheme.paper, in: Circle())
                 .disabled(isRefreshing)
-                .accessibilityLabel("最新の状態を読み込む")
+                .accessibilityLabel("更新")
+            }
+
+            if let names = householdNames {
+                Text(names)
+                    .font(.bodyRounded(15, weight: .medium))
+                    .foregroundStyle(AppTheme.inkMuted)
             }
         }
         .padding(.top, 8)
+    }
+
+    private var householdNames: String? {
+        guard let user = session.currentUser else { return nil }
+        if let partner = session.partner {
+            return "\(user.displayName)と\(partner.displayName)"
+        }
+        return user.displayName
     }
 
     private func reloadFromCloud() async {
         guard !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }
-        await session.refreshFromCloud()
-    }
-
-    @ViewBuilder
-    private var weekCard: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            WarmMotif(symbol: "heart.text.square")
-            Text(reviewCardTitle)
-                .font(.titleRounded(24))
-                .foregroundStyle(AppTheme.ink)
-            Text(reviewCardBody)
-                .font(.bodyRounded(16))
-                .foregroundStyle(AppTheme.inkMuted)
-                .lineSpacing(4)
-            Button(reviewButtonTitle) {
-                presentedReview = PresentedReview(
-                    date: today,
-                    readOnly: session.hasCompletedOwnReview(reviewDate: today)
-                )
-            }
-            .buttonStyle(PrimaryButtonStyle())
-
-            NavigationLink {
-                ReviewHistoryView()
-            } label: {
-                Text("これまでのふりかえり")
-                    .font(.bodyRounded(14, weight: .medium))
-                    .foregroundStyle(AppTheme.terracotta)
-                    .frame(maxWidth: .infinity)
-            }
-
-            if session.cloudPublishFailed {
-                Text("同期に失敗しました。右上の更新をもう一度試してください。")
-                    .font(.bodyRounded(14))
-                    .foregroundStyle(AppTheme.terracotta)
-                    .lineSpacing(3)
-            }
-        }
-        .padding(24)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AppTheme.terracottaSoft)
-        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cardRadius, style: .continuous))
-    }
-
-    private var reviewCardTitle: String {
-        if session.hasCompletedOwnReview(reviewDate: today),
-           session.partner == nil || session.bothCompletedReview(reviewDate: today) {
-            return "今日のふりかえり"
-        }
-        if session.hasCompletedOwnReview(reviewDate: today) {
-            return "相手のふりかえりを待っています"
-        }
-        return AppCopy.weekReviewTitle
-    }
-
-    private var reviewCardBody: String {
-        if session.hasCompletedOwnReview(reviewDate: today),
-           session.partner == nil || session.bothCompletedReview(reviewDate: today) {
-            return "今日はもう入力できません。結果はいつでも見返せます。"
-        }
-        if session.hasCompletedOwnReview(reviewDate: today) {
-            return "相手の入力がそろうと、ふたりの答えと日々の想いを見られます。"
-        }
-        return AppCopy.weekReviewBody
-    }
-
-    private var reviewButtonTitle: String {
-        if session.hasCompletedOwnReview(reviewDate: today),
-           session.partner == nil || session.bothCompletedReview(reviewDate: today) {
-            return "今日の結果を見る"
-        }
-        if session.hasCompletedOwnReview(reviewDate: today) {
-            return "ふりかえりを開く"
-        }
-        return AppCopy.weekReviewAction
+        await session.refreshFromCloud(markFailure: true)
     }
 
     private var agreementsSection: some View {
@@ -222,35 +121,25 @@ struct HomeView: View {
                     .font(.titleRounded(22))
                     .foregroundStyle(AppTheme.ink)
                 Spacer()
-                Button("すべて見る") {
-                    tab = .agreements
-                }
-                .font(.bodyRounded(14, weight: .medium))
-                .foregroundStyle(AppTheme.terracotta)
+                Text("\(myAgreements.count)こ")
+                    .font(.bodyRounded(13, weight: .medium))
+                    .foregroundStyle(AppTheme.plum)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(AppTheme.lavender, in: Capsule())
             }
 
-            if householdAgreements.isEmpty {
-                EmptyNote(text: "ふたりで話して、最初の約束を残してみましょう。")
+            if myAgreements.isEmpty {
+                EmptyNote(text: "約束を、ひとつずつ。", symbol: "heart", detail: "「わが家の約束」から、\n大切にしたいことを残してみましょう。")
             } else {
-                VStack(spacing: 10) {
-                    ForEach(householdAgreements) { agreement in
-                        NavigationLink {
-                            AgreementDetailView(agreementID: agreement.id)
-                        } label: {
-                            HStack {
-                                Text(agreement.title)
-                                    .font(.bodyRounded(16))
-                                    .foregroundStyle(AppTheme.ink)
-                                    .multilineTextAlignment(.leading)
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.caption)
-                                    .foregroundStyle(AppTheme.inkMuted)
-                            }
-                            .padding(18)
-                            .appCard()
-                        }
-                        .buttonStyle(.plain)
+                VStack(spacing: 12) {
+                    ForEach(Array(myAgreements.enumerated()), id: \.element.id) { index, agreement in
+                        AgreementTile(
+                            title: agreement.title,
+                            subtitle: session.scopeDisplay(for: agreement),
+                            index: index,
+                            showsDisclosure: false
+                        )
                     }
                 }
             }

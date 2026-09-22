@@ -28,18 +28,19 @@ struct ObservationListView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    ScreenHeader(
-                        title: AppCopy.thisWeek,
-                        subtitle: "自分が残したことだけが見えます。パートナーの記録は、ふりかえりで開きます。"
-                    )
+                    ScreenHeader(eyebrow: "LITTLE MOMENTS", title: "今日のこと")
 
-                    Button(AppCopy.addToday) {
+                    IllustratedBanner(title: "何気ない日も、たいせつな一日。", subtitle: "うれしかったこと、伝えておきたいこと。\n写真やひとことにして、残しておこう。", scene: .journal, color: AppTheme.ochreSoft)
+
+                    Button {
                         showsAdd = true
+                    } label: {
+                        Label("今日のことを残す", systemImage: "square.and.pencil")
                     }
-                    .buttonStyle(SecondaryButtonStyle())
+                    .buttonStyle(PrimaryButtonStyle())
 
                     if thisWeek.isEmpty {
-                        EmptyNote(text: "まだ何も残していません。何か感じたときだけで大丈夫です。")
+                        EmptyNote(text: "今週のページは、これから。", symbol: "book.closed", detail: "覚えておきたい出来事を、\nあなたの言葉で残せます。")
                     } else {
                         let grouped = Dictionary(grouping: thisWeek) {
                             AppWeek.calendar.startOfDay(for: $0.createdAt)
@@ -92,9 +93,18 @@ struct ObservationCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(observation.type.display)
-                .font(.bodyRounded(16, weight: .semibold))
-                .foregroundStyle(color(for: observation.type))
+            HStack {
+                Text(observation.type.display)
+                    .font(.bodyRounded(14, weight: .semibold))
+                    .foregroundStyle(color(for: observation.type))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(color(for: observation.type).opacity(0.09), in: Capsule())
+                Spacer()
+                Text(observation.createdAt, style: .time)
+                    .font(.bodyRounded(12))
+                    .foregroundStyle(AppTheme.inkMuted)
+            }
             Text(agreementTitle)
                 .font(.bodyRounded(15, weight: .medium))
                 .foregroundStyle(AppTheme.ink)
@@ -112,7 +122,7 @@ struct ObservationCard: View {
                     Button("編集") { onEdit() }
                     Button("削除") { showsDelete = true }
                     Spacer()
-                    Text("まだ相手には見えません")
+                    Text("未公開")
                         .font(.bodyRounded(12))
                         .foregroundStyle(AppTheme.inkMuted)
                 }
@@ -208,7 +218,7 @@ struct ObservationFlowView: View {
             VStack(alignment: .leading, spacing: 16) {
                 ScreenHeader(title: AppCopy.whichAgreement)
                 if activeAgreements.isEmpty {
-                    EmptyNote(text: "先に、わが家の約束を残してください。")
+                    EmptyNote(text: "先に約束を追加してください")
                 } else {
                     ForEach(activeAgreements) { agreement in
                         ChoiceCard(selected: selectedAgreementID == agreement.id) {
@@ -254,8 +264,8 @@ struct ObservationFlowView: View {
     private var stepThree: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                ScreenHeader(title: AppCopy.aWordTitle, subtitle: AppCopy.aWordBody)
-                TextField("リビングに使用済みおむつが残っていた", text: $note, axis: .vertical)
+                ScreenHeader(title: AppCopy.aWordTitle)
+                TextField("今日の出来事や、そのときの気持ちをひとこと", text: $note, axis: .vertical)
                     .font(.bodyRounded(16))
                     .lineLimit(4...8)
                     .padding(18)
@@ -353,10 +363,6 @@ struct ObservationFlowView: View {
             }
             .buttonStyle(.plain)
             .disabled(isLoadingPhoto)
-
-            Text(AppCopy.photoHint)
-                .font(.bodyRounded(13))
-                .foregroundStyle(AppTheme.inkMuted)
         }
     }
 

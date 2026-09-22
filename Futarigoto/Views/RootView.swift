@@ -34,6 +34,7 @@ struct RootView: View {
 enum MainTab: Hashable {
     case home
     case today
+    case review
     case agreements
 }
 
@@ -42,21 +43,27 @@ struct MainTabView: View {
 
     var body: some View {
         TabView(selection: $tab) {
-            HomeView(tab: $tab)
+            HomeView()
                 .tabItem {
-                    Label("ホーム", systemImage: "house")
+                    Label("ホーム", systemImage: "house.fill")
                 }
                 .tag(MainTab.home)
 
             ObservationListView()
                 .tabItem {
-                    Label("今日のこと", systemImage: "text.quote")
+                    Label("今日のこと", systemImage: "book.closed.fill")
                 }
                 .tag(MainTab.today)
 
+            ReviewTabView()
+                .tabItem {
+                    Label("ふりかえり", systemImage: "bubble.left.and.bubble.right.fill")
+                }
+                .tag(MainTab.review)
+
             AgreementListView()
                 .tabItem {
-                    Label("わが家の約束", systemImage: "heart")
+                    Label("わが家の約束", systemImage: "heart.fill")
                 }
                 .tag(MainTab.agreements)
         }
