@@ -339,6 +339,9 @@ struct ObservationFlowView: View {
                     .frame(height: 180)
                     .clipped()
                     .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    // Clipping does not constrain hit testing of the scaled image.
+                    // This display-only preview must not intercept taps on the note field.
+                    .allowsHitTesting(false)
                     .accessibilityLabel("添付した写真")
             }
 
