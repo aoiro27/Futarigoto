@@ -119,3 +119,15 @@ enum AppCopy {
     static let bothReadyTitle = "ふりかえりがそろいました"
     static let bothReadyBody = "結果を見られます。"
 }
+
+/// An agreement added after a review began belongs to the following review.
+enum ReviewGoalEligibility {
+    static func includes(createdAt: Date, reviewDate: Date, firstAnswerAt: Date?) -> Bool {
+        let calendar = AppWeek.calendar
+        let day = calendar.startOfDay(for: reviewDate)
+        guard let nextDay = calendar.date(byAdding: .day, value: 1, to: day), createdAt < nextDay else {
+            return false
+        }
+        return firstAnswerAt.map { createdAt <= $0 } ?? true
+    }
+}

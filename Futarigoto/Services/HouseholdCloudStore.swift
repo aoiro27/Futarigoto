@@ -114,11 +114,20 @@ enum HouseholdCloudStore {
     }
 
     static func fetchHousehold() async throws -> HouseholdSnapshot? {
+        var snapshot: HouseholdSnapshot?
         do {
-            return try await fetchHouseholdViaRPC()
+            snapshot = try await fetchHouseholdViaRPC()
         } catch {
-            return try await fetchHouseholdFromTables()
+            snapshot = try await fetchHouseholdFromTables()
         }
+        if var result = snapshot {
+            let client = try SupabaseConfig.client()
+            let steps: [AgreementStepDTO] = try await client.from("agreement_steps").select().execute().value
+            let ids = Set(result.agreements.map(\.id))
+            result.steps = steps.filter { ids.contains($0.agreementId) }
+            return result
+        }
+        return nil
     }
 
     static func save(snapshot: HouseholdSnapshot) async throws {
@@ -155,6 +164,12 @@ enum HouseholdCloudStore {
                 }
             }
             try await group.waitForAll()
+        }
+
+        let activeAgreementIDs = Set(agreements.filter { $0.deletedAt == nil }.map(\.id))
+        let steps = (snapshot.steps ?? []).filter { $0.authorId == userId && activeAgreementIDs.contains($0.agreementId) }
+        if !steps.isEmpty {
+            try await client.from("agreement_steps").upsert(steps).execute()
         }
 
         do {
@@ -467,6 +482,7 @@ struct HouseholdSnapshot: Codable {
     var agreements: [AgreementDTO]
     var observations: [ObservationDTO]
     var reflections: [ReflectionDTO]
+    var steps: [AgreementStepDTO]? = nil
 }
 
 struct HouseholdDTO: Codable {
@@ -676,5 +692,22 @@ enum InviteCode {
             urlString = urlString[..<separator.lowerBound].lowercased() + urlString[separator.lowerBound...]
         }
         return URL(string: urlString)
+    }
+}
+
+struct AgreementStepDTO: Codable {
+    var id: UUID
+    var agreementId: UUID
+    var authorId: UUID
+    var text: String
+    var reviewDate: Date?
+    var createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, text
+        case agreementId = "agreement_id"
+        case authorId = "author_id"
+        case reviewDate = "review_date"
+        case createdAt = "created_at"
     }
 }

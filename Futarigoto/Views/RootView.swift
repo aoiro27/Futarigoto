@@ -63,7 +63,7 @@ struct MainTabView: View {
 
             AgreementListView()
                 .tabItem {
-                    Label("わが家の約束", systemImage: "heart.fill")
+                    Label(AppCopy.agreements, systemImage: "heart.fill")
                 }
                 .tag(MainTab.agreements)
         }

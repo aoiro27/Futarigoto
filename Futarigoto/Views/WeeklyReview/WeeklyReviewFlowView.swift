@@ -15,6 +15,8 @@ struct WeeklyReviewFlowView: View {
     @State private var phase: Phase = .loading
     @State private var isSaving = false
     @State private var saveError: String?
+    @State private var trySource: Agreement?
+    @State private var savedTry = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     enum Phase {
@@ -56,10 +58,8 @@ struct WeeklyReviewFlowView: View {
     }
 
     private var householdAgreements: [Agreement] {
-        guard let householdId = session.currentHouseholdID else { return [] }
-        return agreements
-            .filter { $0.householdId == householdId && $0.deletedAt == nil }
-            .sorted { $0.createdAt < $1.createdAt }
+        let _ = (agreements.count, reflections.count, session.syncRevision)
+        return session.reviewAgreements(reviewDate: reviewDate)
     }
 
     private var pages: [ReviewPage] { ReviewPage.group(questions) }
@@ -92,6 +92,11 @@ struct WeeklyReviewFlowView: View {
                 }
             }
             .screenBackground()
+            .sheet(item: $trySource) { agreement in
+                AgreementStepFormView(agreement: agreement, reviewDate: reviewDate) {
+                    savedTry = true
+                }
+            }
             .alert("保存できませんでした", isPresented: Binding(
                 get: { saveError != nil },
                 set: { if !$0 { saveError = nil } }
@@ -252,6 +257,12 @@ struct WeeklyReviewFlowView: View {
                     }
                 }
 
+                if savedTry {
+                    Label("この約束に、やってみることを残しました。「わが家の約束」で見返せます。", systemImage: "checkmark.circle")
+                        .font(.bodyRounded(14))
+                        .foregroundStyle(AppTheme.inkMuted)
+                }
+
                 Button(AppCopy.finish) {
                     session.markPartnerRevealSeen(reviewDate: reviewDate)
                     dismiss()
@@ -288,6 +299,15 @@ struct WeeklyReviewFlowView: View {
                     }
                 }
             }
+
+            AgreementStepsView(agreementID: agreement.id, reviewDate: reviewDate)
+
+            Button {
+                trySource = agreement
+            } label: {
+                Label("ふりかえりから、やってみることを残す", systemImage: "plus.circle")
+            }
+            .buttonStyle(SecondaryButtonStyle())
 
             if !notes.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {

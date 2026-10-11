@@ -224,6 +224,25 @@ final class AppSession {
         schedulePublishToCloud()
     }
 
+    func addStep(agreementID: UUID, text: String, reviewDate: Date?) throws {
+        let context = try requireContext()
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let authorID = currentUserID,
+              let agreement = agreement(id: agreementID),
+              agreement.householdId == currentHouseholdID, agreement.isActive,
+              !trimmed.isEmpty, trimmed.count <= 500 else { throw AppError.notReady }
+        let step = AgreementStep(agreementId: agreementID, authorId: authorID, text: trimmed,
+                                 reviewDate: reviewDate.map(AppWeek.startOfDay))
+        context.insert(step)
+        do {
+            try context.save()
+        } catch {
+            context.delete(step)
+            throw error
+        }
+        schedulePublishToCloud()
+    }
+
     func updateAgreement(_ agreement: Agreement, title: String, scope: ScopeFormSelection, memo: String?) throws {
         let context = try requireContext()
         guard currentUserID != nil else { return }
@@ -402,15 +421,29 @@ final class AppSession {
             && hasCompletedReview(userId: partner.id, reviewDate: reviewDate)
     }
 
+    /// Freeze the day's agreements at the first saved answer.
+    func reviewAgreements(reviewDate: Date) -> [Agreement] {
+        let active = activeAgreements()
+        let ids = Set(active.map(\.id))
+        let answers = allReflections().filter {
+            ids.contains($0.agreementId) && AppWeek.startOfDay($0.weekStartDate) == AppWeek.startOfDay(reviewDate)
+        }
+        let cutoff = answers.map(\.completedAt).min()
+        return active.filter {
+            ReviewGoalEligibility.includes(createdAt: $0.createdAt, reviewDate: reviewDate, firstAnswerAt: cutoff)
+        }
+    }
+
     private func hasCompletedReview(userId: UUID, reviewDate: Date) -> Bool {
         let existing = reflections(userId: userId, reviewDate: reviewDate)
         var byAgreement: [UUID: WeeklyReflection] = [:]
         for item in existing {
             byAgreement[item.agreementId] = item
         }
-        let myAgreements = applicableAgreements(for: userId)
+        let goals = reviewAgreements(reviewDate: reviewDate)
+        let myAgreements = goals.filter { $0.applies(to: userId) }
         let otherId = counterpartId(of: userId)
-        let otherAgreements = otherId.map { applicableAgreements(for: $0) } ?? []
+        let otherAgreements = otherId.map { id in goals.filter { $0.applies(to: id) } } ?? []
         guard !myAgreements.isEmpty || !otherAgreements.isEmpty else { return false }
 
         for agreement in myAgreements {
@@ -478,7 +511,14 @@ final class AppSession {
     func syncSharedReviewNotes(reviewDate: Date) async {
         guard bothCompletedReview(reviewDate: reviewDate) || partner == nil else { return }
         await publishUnpublishedObservations()
-        try? await pullHousehold()
+        do {
+            // The partner's unpublished notes are not in the local snapshot.
+            // Publish them on the server before fetching the shared review.
+            try await HouseholdCloudStore.publishPendingObservations()
+            try await pullHousehold()
+        } catch {
+            cloudPublishFailed = true
+        }
     }
 
     func markPartnerRevealSeen(reviewDate: Date) {
@@ -517,6 +557,7 @@ final class AppSession {
         }
         if !targets.isEmpty {
             try? context.save()
+            markCloudDirty()
         }
         await publishToCloud(markFailure: false)
     }
@@ -602,6 +643,9 @@ final class AppSession {
         }
         for member in members() where member.userId == oldId {
             member.userId = authId
+        }
+        for step in allSteps() where step.authorId == oldId {
+            step.authorId = authId
         }
         for observation in allObservations() where observation.authorId == oldId {
             observation.authorId = authId
@@ -695,6 +739,11 @@ final class AppSession {
     private func allAgreements() -> [Agreement] {
         guard let modelContext else { return [] }
         return (try? modelContext.fetch(FetchDescriptor<Agreement>())) ?? []
+    }
+
+    private func allSteps() -> [AgreementStep] {
+        guard let modelContext else { return [] }
+        return (try? modelContext.fetch(FetchDescriptor<AgreementStep>())) ?? []
     }
 
     private func allObservations() -> [DailyObservation] {
@@ -925,6 +974,10 @@ final class AppSession {
                     otherReflectionRaw: $0.otherReflectionRaw,
                     completedAt: $0.completedAt
                 )
+            },
+            steps: allSteps().filter { agreementIDs.contains($0.agreementId) }.map {
+                AgreementStepDTO(id: $0.id, agreementId: $0.agreementId, authorId: $0.authorId,
+                                 text: $0.text, reviewDate: $0.reviewDate, createdAt: $0.createdAt)
             }
         )
     }
@@ -994,6 +1047,13 @@ final class AppSession {
                     )
                 )
             }
+        }
+
+        let existingStepIDs = Set(allSteps().map(\.id))
+        let agreementIDs = Set(snapshot.agreements.map(\.id))
+        for dto in snapshot.steps ?? [] where !existingStepIDs.contains(dto.id) && agreementIDs.contains(dto.agreementId) {
+            context.insert(AgreementStep(id: dto.id, agreementId: dto.agreementId, authorId: dto.authorId,
+                                         text: dto.text, reviewDate: dto.reviewDate, createdAt: dto.createdAt))
         }
 
         let existingObservations = allObservations()

@@ -210,3 +210,22 @@ final class WeeklyReflection {
         self.completedAt = completedAt
     }
 }
+
+@Model
+final class AgreementStep {
+    @Attribute(.unique) var id: UUID
+    var agreementId: UUID
+    var authorId: UUID
+    var text: String
+    var reviewDate: Date?
+    var createdAt: Date
+
+    init(id: UUID = UUID(), agreementId: UUID, authorId: UUID, text: String, reviewDate: Date? = nil, createdAt: Date = .now) {
+        self.id = id
+        self.agreementId = agreementId
+        self.authorId = authorId
+        self.text = text
+        self.reviewDate = reviewDate
+        self.createdAt = createdAt
+    }
+}

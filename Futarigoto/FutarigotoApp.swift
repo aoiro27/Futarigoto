@@ -39,6 +39,7 @@ private func makeModelContainer() -> ModelContainer {
         Household.self,
         HouseholdMember.self,
         Agreement.self,
+        AgreementStep.self,
         DailyObservation.self,
         WeeklyReflection.self
     ])
