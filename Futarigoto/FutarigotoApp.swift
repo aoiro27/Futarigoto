@@ -41,6 +41,7 @@ private func makeModelContainer() -> ModelContainer {
         Agreement.self,
         AgreementStep.self,
         DailyObservation.self,
+        ReviewComment.self,
         WeeklyReflection.self
     ])
     let configuration = ModelConfiguration(

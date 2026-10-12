@@ -158,7 +158,7 @@ struct ReviewTabView: View {
         if session.hasCompletedOwnReview(reviewDate: today) {
             return "自分のふりかえりを見る"
         }
-        return "今日をふりかえる"
+        return "ふりかえりする"
     }
 
     private func historyStatus(for day: Date) -> String? {

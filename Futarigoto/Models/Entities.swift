@@ -229,3 +229,23 @@ final class AgreementStep {
         self.createdAt = createdAt
     }
 }
+
+/// One person's comment on the entire day's review, independent of any agreement.
+@Model
+final class ReviewComment {
+    @Attribute(.unique) var id: UUID
+    var householdId: UUID
+    var userId: UUID
+    var reviewDate: Date
+    var text: String
+    var updatedAt: Date
+
+    init(id: UUID = UUID(), householdId: UUID, userId: UUID, reviewDate: Date, text: String, updatedAt: Date = .now) {
+        self.id = id
+        self.householdId = householdId
+        self.userId = userId
+        self.reviewDate = reviewDate
+        self.text = text
+        self.updatedAt = updatedAt
+    }
+}

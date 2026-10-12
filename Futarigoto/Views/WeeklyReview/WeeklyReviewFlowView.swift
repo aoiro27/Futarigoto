@@ -9,8 +9,10 @@ struct WeeklyReviewFlowView: View {
     @Query private var agreements: [Agreement]
     @Query private var observations: [DailyObservation]
     @Query private var reflections: [WeeklyReflection]
+    @Query private var reviewComments: [ReviewComment]
 
     @State private var drafts: [ReviewAnswer] = []
+    @State private var commentDraft = ""
     @State private var index = 0
     @State private var phase: Phase = .loading
     @State private var isSaving = false
@@ -22,6 +24,7 @@ struct WeeklyReviewFlowView: View {
     enum Phase {
         case loading
         case selfReview
+        case reviewComment
         case waiting
         case recap
     }
@@ -82,6 +85,8 @@ struct WeeklyReviewFlowView: View {
                     loadingContent
                 case .selfReview:
                     selfReviewContent
+                case .reviewComment:
+                    reviewCommentContent
                 case .waiting:
                     waitingContent
                 case .recap:
@@ -222,7 +227,7 @@ struct WeeklyReviewFlowView: View {
             } label: {
                 HStack(spacing: 8) {
                     if isSaving { ProgressView().tint(.white) }
-                    Text(index + 1 == pages.count ? "ふりかえりを残す" : "次の約束へ")
+                    Text(index + 1 == pages.count ? "最後に、ひとこと" : "次の約束へ")
                     Image(systemName: index + 1 == pages.count ? "heart.fill" : "arrow.right")
                 }
             }
@@ -235,10 +240,87 @@ struct WeeklyReviewFlowView: View {
         .background(AppTheme.cream)
     }
 
+    private var reviewCommentContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                ScreenHeader(eyebrow: AppWeek.dayLabel(for: reviewDate), title: "今回のふりかえりに、ひとこと")
+                Text("ふりかえり全体を通して感じたことや、相手に伝えたいことを。書かずに終えても大丈夫です。")
+                    .font(.bodyRounded(15))
+                    .foregroundStyle(AppTheme.inkMuted)
+                TextField("例：今週は忙しかったけれど、一緒に話せてよかった。", text: $commentDraft, axis: .vertical)
+                    .font(.bodyRounded(17))
+                    .lineLimit(5...10)
+                    .padding(18)
+                    .appCard()
+                    .accessibilityLabel("今回のふりかえりへのひとこと（任意）")
+                    .disabled(isSaving)
+                Text("任意・\(commentDraft.count)/500文字")
+                    .font(.bodyRounded(12))
+                    .foregroundStyle(commentDraft.count > 500 ? AppTheme.terracotta : AppTheme.inkMuted)
+                Text("ふたりの回答がそろうと、結果画面でお互いのひとことを見返せます。")
+                    .font(.bodyRounded(14))
+                    .foregroundStyle(AppTheme.inkMuted)
+                Button("回答に戻る") { phase = .selfReview }
+                    .buttonStyle(QuietButtonStyle())
+                    .disabled(isSaving)
+                Button {
+                    finishSelfReview()
+                } label: {
+                    HStack {
+                        if isSaving { ProgressView() }
+                        Text("ふりかえりを残す")
+                    }
+                }
+                .buttonStyle(PrimaryButtonStyle(enabled: !isSaving && commentDraft.count <= 500))
+                .disabled(isSaving || commentDraft.count > 500)
+            }
+            .padding(24)
+            .readableWidth()
+        }
+    }
+
+    private var commentRecap: some View {
+        let comments = reviewComments.filter {
+            $0.householdId == session.currentHouseholdID && AppWeek.isSameDay($0.reviewDate, reviewDate)
+                && !$0.text.isEmpty
+                && ($0.userId == session.currentUserID || session.bothCompletedReview(reviewDate: reviewDate))
+        }.sorted { $0.userId.uuidString < $1.userId.uuidString }
+        return VStack(alignment: .leading, spacing: 14) {
+            if !comments.isEmpty {
+                Label("今回のふりかえりに、ひとこと", systemImage: "text.bubble")
+                    .font(.titleRounded(20))
+                    .foregroundStyle(AppTheme.ink)
+                ForEach(comments) { comment in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(authorName(comment.userId))
+                            .font(.bodyRounded(14, weight: .semibold))
+                            .foregroundStyle(AppTheme.plum)
+                        Text(comment.text)
+                            .font(.bodyRounded(16))
+                            .foregroundStyle(AppTheme.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(18)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .appCard()
+                }
+            }
+        }
+    }
+
     private var waitingContent: some View {
         ReviewWaitingView(partnerName: session.partner?.displayName ?? "パートナー") {
             dismiss()
         }
+    }
+
+    private var recapAgreements: [Agreement] {
+        let reviewIDs = Set(householdAgreements.map(\.id))
+        let period = session.reviewRecordPeriod(reviewDate: reviewDate)
+        let noteIDs = Set(observations.filter { !$0.isDeleted && period.contains($0.createdAt) }.map(\.agreementId))
+        return agreements.filter {
+            $0.householdId == session.currentHouseholdID && (reviewIDs.contains($0.id) || noteIDs.contains($0.id))
+        }.sorted { $0.createdAt < $1.createdAt }
     }
 
     private var recapContent: some View {
@@ -249,13 +331,15 @@ struct WeeklyReviewFlowView: View {
                     isTogether: session.partner != nil && session.bothCompletedReview(reviewDate: reviewDate)
                 )
 
-                if householdAgreements.isEmpty {
+                if recapAgreements.isEmpty {
                     EmptyNote(text: "約束がありません")
                 } else {
-                    ForEach(Array(householdAgreements.enumerated()), id: \.element.id) { index, agreement in
+                    ForEach(Array(recapAgreements.enumerated()), id: \.element.id) { index, agreement in
                         recapCard(for: agreement, index: index)
                     }
                 }
+
+                commentRecap
 
                 if savedTry {
                     Label("この約束に、やってみることを残しました。「わが家の約束」で見返せます。", systemImage: "checkmark.circle")
@@ -302,16 +386,18 @@ struct WeeklyReviewFlowView: View {
 
             AgreementStepsView(agreementID: agreement.id, reviewDate: reviewDate)
 
-            Button {
-                trySource = agreement
-            } label: {
-                Label("ふりかえりから、やってみることを残す", systemImage: "plus.circle")
+            if agreement.isActive {
+                Button {
+                    trySource = agreement
+                } label: {
+                    Label("ふりかえりから、やってみることを残す", systemImage: "plus.circle")
+                }
+                .buttonStyle(SecondaryButtonStyle())
             }
-            .buttonStyle(SecondaryButtonStyle())
 
             if !notes.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
-                    Label("この日に残した、ひとこと", systemImage: "book.closed.fill")
+                    Label("前回のふりかえりからの記録", systemImage: "book.closed.fill")
                         .font(.bodyRounded(13, weight: .medium))
                         .foregroundStyle(AppTheme.plum)
                     ForEach(notes) { item in
@@ -325,6 +411,10 @@ struct WeeklyReviewFlowView: View {
     }
 
     private func prepare() {
+        commentDraft = reviewComments.first {
+            $0.householdId == session.currentHouseholdID && $0.userId == session.currentUserID
+                && AppWeek.isSameDay($0.reviewDate, reviewDate)
+        }?.text ?? ""
         if readOnly || session.hasCompletedOwnReview(reviewDate: reviewDate) {
             advanceAfterSelfReview()
             return
@@ -380,7 +470,7 @@ struct WeeklyReviewFlowView: View {
     private func goNext() {
         guard !isSaving, let current, isComplete(current) else { return }
         if index + 1 == pages.count {
-            finishSelfReview()
+            phase = .reviewComment
             return
         }
         do {
@@ -396,11 +486,11 @@ struct WeeklyReviewFlowView: View {
     }
 
     private func finishSelfReview() {
-        guard !isSaving, pages.allSatisfy({ isComplete($0) }) else { return }
+        guard !isSaving, commentDraft.count <= 500, pages.allSatisfy({ isComplete($0) }) else { return }
         isSaving = true
         do {
             let payload = drafts.compactMap(reflectionDraft(from:))
-            try session.saveReflections(payload, reviewDate: reviewDate)
+            try session.saveReflections(payload, reviewDate: reviewDate, reviewComment: commentDraft)
         } catch {
             isSaving = false
             saveError = "入力はこの画面に残っています。もう一度お試しください。"
@@ -545,22 +635,13 @@ struct WeeklyReviewFlowView: View {
         }
     }
 
-    private func belongsToReview(_ item: DailyObservation) -> Bool {
-        if AppWeek.isSameDay(item.createdAt, reviewDate) {
-            return true
-        }
-        if let published = item.publishedAt {
-            return AppWeek.isSameDay(published, reviewDate)
-        }
-        return false
-    }
-
     private func reviewNotes(for agreementId: UUID) -> [DailyObservation] {
+        let period = session.reviewRecordPeriod(reviewDate: reviewDate)
         let revealShared = session.partner == nil || session.bothCompletedReview(reviewDate: reviewDate)
         return observations
             .filter { item in
                 guard item.agreementId == agreementId, !item.isDeleted else { return false }
-                guard belongsToReview(item) else { return false }
+                guard period.contains(item.createdAt) else { return false }
                 return revealShared || item.authorId == session.currentUserID
             }
             .sorted(by: reviewNoteOrder)

@@ -125,6 +125,9 @@ enum HouseholdCloudStore {
             let steps: [AgreementStepDTO] = try await client.from("agreement_steps").select().execute().value
             let ids = Set(result.agreements.map(\.id))
             result.steps = steps.filter { ids.contains($0.agreementId) }
+            let comments: [ReviewCommentDTO] = try await client.from("review_comments")
+                .select().eq("household_id", value: result.household.id).execute().value
+            result.reviewComments = comments
             return result
         }
         return nil
@@ -164,6 +167,13 @@ enum HouseholdCloudStore {
                 }
             }
             try await group.waitForAll()
+        }
+
+        let comments = (snapshot.reviewComments ?? []).filter { $0.userId == userId }
+        if !comments.isEmpty {
+            try await client.from("review_comments").upsert(
+                comments, onConflict: "household_id,user_id,review_date"
+            ).execute()
         }
 
         let activeAgreementIDs = Set(agreements.filter { $0.deletedAt == nil }.map(\.id))
@@ -483,6 +493,7 @@ struct HouseholdSnapshot: Codable {
     var observations: [ObservationDTO]
     var reflections: [ReflectionDTO]
     var steps: [AgreementStepDTO]? = nil
+    var reviewComments: [ReviewCommentDTO]? = nil
 }
 
 struct HouseholdDTO: Codable {
@@ -692,6 +703,23 @@ enum InviteCode {
             urlString = urlString[..<separator.lowerBound].lowercased() + urlString[separator.lowerBound...]
         }
         return URL(string: urlString)
+    }
+}
+
+struct ReviewCommentDTO: Codable {
+    var id: UUID
+    var householdId: UUID
+    var userId: UUID
+    var reviewDate: Date
+    var text: String
+    var updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, text
+        case householdId = "household_id"
+        case userId = "user_id"
+        case reviewDate = "review_date"
+        case updatedAt = "updated_at"
     }
 }
 

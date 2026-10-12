@@ -131,3 +131,13 @@ enum ReviewGoalEligibility {
         return firstAnswerAt.map { createdAt <= $0 } ?? true
     }
 }
+
+/// Adjacent reviews partition records by entry time, never by publication time.
+struct ReviewRecordPeriod {
+    let after: Date?
+    let through: Date
+
+    func contains(_ createdAt: Date) -> Bool {
+        createdAt <= through && (after.map { createdAt > $0 } ?? true)
+    }
+}

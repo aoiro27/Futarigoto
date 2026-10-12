@@ -434,6 +434,24 @@ final class AppSession {
         }
     }
 
+    func reviewRecordPeriod(reviewDate: Date) -> ReviewRecordPeriod {
+        let ids = Set(allAgreements().filter { $0.householdId == currentHouseholdID }.map(\.id))
+        let people = Set(householdMembers.map(\.id))
+        let answers = allReflections().filter { ids.contains($0.agreementId) && people.contains($0.userId) }
+        let day = AppWeek.startOfDay(reviewDate)
+        let grouped = Dictionary(grouping: answers) { AppWeek.startOfDay($0.weekStartDate) }
+        // Only completed household reviews establish a boundary; partial answers do not.
+        let previousDay = grouped.keys.filter { candidate in
+            candidate < day && !people.isEmpty && people.allSatisfy {
+                hasCompletedReview(userId: $0, reviewDate: candidate)
+            }
+        }.max()
+        let previousEnd = previousDay.flatMap { grouped[$0]?.map(\.completedAt).max() }
+        let currentEnd = grouped[day]?.map(\.completedAt).max()
+        let endOfDay = AppWeek.calendar.date(byAdding: .day, value: 1, to: day)!.addingTimeInterval(-0.001)
+        return ReviewRecordPeriod(after: previousEnd, through: currentEnd ?? min(.now, endOfDay))
+    }
+
     private func hasCompletedReview(userId: UUID, reviewDate: Date) -> Bool {
         let existing = reflections(userId: userId, reviewDate: reviewDate)
         var byAgreement: [UUID: WeeklyReflection] = [:]
@@ -455,10 +473,13 @@ final class AppSession {
         return true
     }
 
-    func saveReflections(_ drafts: [ReflectionDraft], reviewDate: Date) throws {
+    func saveReflections(_ drafts: [ReflectionDraft], reviewDate: Date, reviewComment: String? = nil) throws {
         let context = try requireContext()
         guard let userId = currentUserID else { return }
         let day = AppWeek.startOfDay(reviewDate)
+        if let reviewComment {
+            try storeReviewComment(reviewComment, reviewDate: day, context: context)
+        }
         var merged: [UUID: ReflectionDraft] = [:]
         for draft in drafts {
             var item = merged[draft.agreementId] ?? ReflectionDraft(agreementId: draft.agreementId)
@@ -505,6 +526,21 @@ final class AppSession {
             if householdMembers.count == 2, hadUnpublished {
                 NotificationService.shared.notifyBothReflectionsReady()
             }
+        }
+    }
+
+    private func storeReviewComment(_ text: String, reviewDate: Date, context: ModelContext) throws {
+        guard let householdID = currentHouseholdID, let userID = currentUserID,
+              text.count <= 500 else { throw AppError.notReady }
+        let day = AppWeek.startOfDay(reviewDate)
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let existing = allReviewComments().first(where: {
+            $0.householdId == householdID && $0.userId == userID && AppWeek.isSameDay($0.reviewDate, day)
+        }) {
+            existing.text = trimmed
+            existing.updatedAt = .now
+        } else if !trimmed.isEmpty {
+            context.insert(ReviewComment(householdId: householdID, userId: userID, reviewDate: day, text: trimmed))
         }
     }
 
@@ -644,6 +680,9 @@ final class AppSession {
         for member in members() where member.userId == oldId {
             member.userId = authId
         }
+        for comment in allReviewComments() where comment.userId == oldId {
+            comment.userId = authId
+        }
         for step in allSteps() where step.authorId == oldId {
             step.authorId = authId
         }
@@ -739,6 +778,11 @@ final class AppSession {
     private func allAgreements() -> [Agreement] {
         guard let modelContext else { return [] }
         return (try? modelContext.fetch(FetchDescriptor<Agreement>())) ?? []
+    }
+
+    private func allReviewComments() -> [ReviewComment] {
+        guard let modelContext else { return [] }
+        return (try? modelContext.fetch(FetchDescriptor<ReviewComment>())) ?? []
     }
 
     private func allSteps() -> [AgreementStep] {
@@ -978,6 +1022,10 @@ final class AppSession {
             steps: allSteps().filter { agreementIDs.contains($0.agreementId) }.map {
                 AgreementStepDTO(id: $0.id, agreementId: $0.agreementId, authorId: $0.authorId,
                                  text: $0.text, reviewDate: $0.reviewDate, createdAt: $0.createdAt)
+            },
+            reviewComments: allReviewComments().filter { $0.householdId == household.id }.map {
+                ReviewCommentDTO(id: $0.id, householdId: $0.householdId, userId: $0.userId,
+                                 reviewDate: $0.reviewDate, text: $0.text, updatedAt: $0.updatedAt)
             }
         )
     }
@@ -1046,6 +1094,21 @@ final class AppSession {
                         deletedAt: dto.deletedAt
                     )
                 )
+            }
+        }
+
+        let existingComments = allReviewComments()
+        for dto in snapshot.reviewComments ?? [] where dto.householdId == household.id {
+            if let existing = existingComments.first(where: {
+                $0.householdId == dto.householdId && $0.userId == dto.userId && AppWeek.isSameDay($0.reviewDate, dto.reviewDate)
+            }) {
+                if dto.updatedAt >= existing.updatedAt {
+                    existing.text = dto.text
+                    existing.updatedAt = dto.updatedAt
+                }
+            } else {
+                context.insert(ReviewComment(id: dto.id, householdId: dto.householdId, userId: dto.userId,
+                                             reviewDate: AppWeek.startOfDay(dto.reviewDate), text: dto.text, updatedAt: dto.updatedAt))
             }
         }
 
